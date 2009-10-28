@@ -1,0 +1,130 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ClassDiagram MajorVersion="1" MinorVersion="1">
+  <Struct Name="uthread_context">
+    <Position X="3.25" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAQAAgIAAAAgAAAAAAA=</HashCode>
+      <FileName>uthread.c</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="uthread">
+    <Position X="0.75" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>gQAAAAAAAAAAIAAAAgAAAAAAAAAgAACAAAAAAAAAAAA=</HashCode>
+      <FileName>uthread.c</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="dlist_node">
+    <Position X="0.75" Y="3.75" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAQAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>lists.h</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="slist_node">
+    <Position X="5.5" Y="3.75" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>lists.h</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="uthread_countdownlatch">
+    <Position X="7.75" Y="7.25" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAABAAAAAAAAQAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>uthread.h</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="uthread_mutex">
+    <Position X="0.5" Y="7.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAgAAABABAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>uthread.h</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="uthread_semaphore">
+    <Position X="3.75" Y="7.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAABAAA=</HashCode>
+      <FileName>uthread.h</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Typedef Name="uthread_context_t" Collapsed="true">
+    <Position X="4.75" Y="2.75" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>uthread.c</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Typedef Name="uthread_t" Collapsed="true">
+    <Position X="0.5" Y="3" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>uthread.c</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Typedef Name="dlist_t" Collapsed="true">
+    <Position X="1.75" Y="6.5" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>lists.h</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Typedef Name="dlist_node_t" Collapsed="true">
+    <Position X="0.5" Y="5.5" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>lists.h</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Typedef Name="slist_node_t" Collapsed="true">
+    <Position X="4.5" Y="5.5" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>lists.h</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Typedef Name="slist_t" Collapsed="true">
+    <Position X="6.75" Y="5.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>lists.h</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Typedef Name="uthread_argument_t" Collapsed="true">
+    <Position X="0.5" Y="10.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>uthread.h</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Typedef Name="uthread_function_t" Collapsed="true">
+    <Position X="3" Y="10.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>uthread.h</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Typedef Name="uthread_countdownlatch_t" Collapsed="true">
+    <Position X="8" Y="9" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>uthread.h</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Typedef Name="uthread_mutex_t" Collapsed="true">
+    <Position X="0.5" Y="9.5" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>uthread.h</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Typedef Name="uthread_semaphore_t" Collapsed="true">
+    <Position X="4" Y="9.25" Width="3.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>uthread.h</FileName>
+    </TypeIdentifier>
+  </Typedef>
+  <Font Name="Tahoma" Size="8.25" />
+</ClassDiagram>
