@@ -72,6 +72,7 @@ static uthread_countdownlatch_t foreground_latch;
 // the running thread. A thread is selected to run by placing it at the
 // head of the ready queue and calling uthread_internal_schedule.
 static dlist_t uthread_internal_readyQueue;
+static dlist_t uthread_internal_sleepQueue; 
 
 // Reference to the currently running thread.
 static uthread_t * uthread_internal_pRunningThread;
@@ -82,10 +83,7 @@ static uthread_t * uthread_internal_pRunningThread;
 // the running state. This variable, if not NULL, holds a reference to
 // a thread that has terminated and needs to have its resources freed.
 static uthread_t * uthread_internal_pZombieThread;
-
 static uthread_t * uthread_cThreads[1024]; //cThreads == Current Threads
-
-static uthread_t *sQueue = NULL; //sQueue == Sleep Queue
 
 ///////////////////////////////////////////////////////////
 //
@@ -119,20 +117,16 @@ static unsigned int uthread_internal_generateUniqueThreadId() {
 
 
 void uthread_sleep_wake_up(){
-    uthread_sleep_element_t *aux; 
-    uthread_t               *sThread; //sThread == Sleep Thread
-    long                     cTicks;  
-     //Trevial Case
-    if( sQueue == NULL ) return;  //Evita o System Call para obter os ticks
+    uthread_t   *sThread; //sThread == Sleep Thread
+    long         cTicks;  
+    
+    //Trevial Case
+    if( dlist_isEmpty(&uthread_internal_sleepQueue) ) return;  //Evita o System Call para obter os ticks
 
     cTicks = uthread_get_internal_ticks();
-    if( sQueue->absolute_time > cTicks ) return;
-
-     sThread = sQueue->thread;
-     aux     = sQueue;
-     sQueue  = sQueue->next; //Move Next
-     free( aux );
-
+    if( (((uthread_t *)dlist_getFirst(&uthread_internal_sleepQueue))->sleep_absolute_time) > cTicks ) return;
+    
+     sThread = dlist_dequeue( &uthread_internal_sleepQueue );
      dlist_enqueue(&uthread_internal_readyQueue, &(sThread->node));
      uthread_sleep_wake_up();
 }
@@ -185,6 +179,11 @@ void dlist_sorted_push( dlist_t *pHeader, dlist_t *pNode, int (*uthread_compareT
 }
 
 void uthread_init() {
+    uthread_t * pMainThread;
+	dlist_init(&uthread_internal_readyQueue);
+    dlist_init(&uthread_internal_sleepQueue);
+
+
 	pMainThread = (uthread_t *)malloc(sizeof(uthread_t));
 	assert(pMainThread != NULL);
 	pMainThread->tid = 1;            // the main thread has a fixed id of 1
@@ -279,6 +278,7 @@ void uthread_exit() {
 		//assert(uthread_internal_numThreads == 1); /????? 
 		// OK to cleanup main thread.
 		dlist_init(&uthread_internal_readyQueue);
+        dlist_init(&uthread_internal_sleepQueue);
 		free(uthread_internal_pRunningThread);
 		uthread_internal_pRunningThread = NULL;
 		uthread_internal_numThreads = 0;
@@ -537,8 +537,9 @@ void uthread_semaphore_wait_n(uthread_semaphore_t * pSemaphore, unsigned int n) 
 		// 1. Remove *running* thread from ready list.
 		dlist_remove(&uthread_internal_readyQueue, &(uthread_internal_pRunningThread->node));
 		// 2. Insert *running* thread at the end of the semaphore queue.
-		dlist_enqueue(&(pSemaphore->queue), &(uthread_internal_pRunningThread->node));
-		// 3. Context switch to the next ready thread.
+		//dlist_enqueue(&(pSemaphore->queue), &(uthread_internal_pRunningThread->node));
+		dlist_sorted_push( &(pSemaphore->queue), &(uthread_internal_pRunningThread->node), &uthread_compare_waitn );
+        // 3. Context switch to the next ready thread.
 		uthread_internal_schedule();
 	}
 }
@@ -555,67 +556,39 @@ void uthread_semaphore_wait(uthread_semaphore_t * pSemaphore) {
 // If there are threads blocked in the semaphore, the one at the head
 // of the wait queue is given the unit and becomes ready to run.
 void uthread_semaphore_post(uthread_semaphore_t * pSemaphore) {
-	if (dlist_isEmpty(&(pSemaphore->queue))) {
-		// No threads waiting. Just add a permit.
-		++(pSemaphore->permits);
-	} else {
-		// Release one thread from the semaphore's waiting queue.
-		uthread_t * pThread = (uthread_t *)dlist_dequeue(&(pSemaphore->queue));
-		// Insert woken thread into the ready queue
-		dlist_enqueue(&uthread_internal_readyQueue, &(pThread->node));
-		// The woken thread will execute after getting to the front of the ready queue.
-	}
+     uthread_t * pThread;
+
+     ++(pSemaphore->permits);
+     if (dlist_isEmpty(&(pSemaphore->queue))) return; // No threads waiting. Just add a permit.
+
+     pThread = ((uthread_t *)dlist_getFirst(&(pSemaphore->queue)));
+     if( pSemaphore->permits >= pThread->waitn ){
+         pSemaphore->permits -=  ( pThread->waitn);
+         // Release one thread from the semaphore's waiting queue.
+         pThread = (uthread_t *)dlist_dequeue(&(pSemaphore->queue));
+         // Insert woken thread into the ready queue
+         dlist_enqueue(&uthread_internal_readyQueue, &(pThread->node));
+         // The woken thread will execute after getting to the front of the ready queue.
+     }
 }
 
 long uthread_get_internal_ticks(){
     return( GetTickCount() );
 }
 
-uthread_sleep_element_t* uthread_sleep_create(  ){
-    return ( (uthread_sleep_element_t*)malloc( sizeof(uthread_sleep_element_t) ) );
-}
-
 void uthread_sleep( unsigned int millisecondsTimeout ){
-    uthread_sleep_element_t* rObj    = NULL; 
-    uthread_sleep_element_t* aux     = NULL;
-    uthread_sleep_element_t* last    = NULL;
-    unsigned char            addLast = 1;
-    uthread_t              * pThread;
+    uthread_t *pThread; 
 
 	//Trivial case
     if( millisecondsTimeout == 0 ){
-        uthread_yield(); //
+        uthread_yield(); //Especificação
         return;
-    }
-
-    rObj = uthread_sleep_create();
-    rObj->absolute_time = uthread_get_internal_ticks() + millisecondsTimeout;
-    rObj->next          = NULL;
-    rObj->thread        = uthread_internal_pRunningThread;
-
-    if( sQueue == NULL ){ //First Element
-        sQueue =  rObj;
-    }else{
-        aux = last = sQueue; //Pointer to First Element
-        do{
-            if( aux->absolute_time > rObj->absolute_time ){
-                rObj->next = aux;
-                if( last == sQueue ) sQueue = rObj;
-                addLast = 0;
-                break;
-            }
-            
-            last = aux;
-        }while( (aux  = aux->next) != NULL );
-
-        if( addLast ){
-            last->next = rObj;
-        }
     }
  
 	pThread = (uthread_t *)dlist_dequeue(&(uthread_internal_pRunningThread));
+    pThread->sleep_absolute_time = uthread_get_internal_ticks() + millisecondsTimeout;
+    dlist_sorted_push( &uthread_internal_sleepQueue, &(pThread->node), &uthread_compare_sleep_absolute_time);
 	uthread_internal_schedule();
-
 }
 
 
@@ -706,18 +679,6 @@ void uthread_create(uthread_function_t function, uthread_argument_t argument, un
 }
 
 void uthread_create_foreground(uthread_function_t function, uthread_argument_t argument){
-    //uthread_sleep_element_t* aux  = NULL;
-
-    //uthread_sleep( 10 ); 
-    //uthread_sleep( 7 );
-    //uthread_sleep( 3 );
-    //uthread_sleep( 12 );
-
-    //aux = sQueue;
-    //do{
-    //    printf( "%d\n", aux->absolute_time );
-    //}while( ( aux = aux->next ) != NULL );
-
     uthread_create(function, argument, foreground );
 }
 
