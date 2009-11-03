@@ -449,7 +449,7 @@ void test3() {
 
 int main()
 {
-    int option = 2;
+    int option = 6;
     long a, b;
 	srand((unsigned int)time(NULL));
 
