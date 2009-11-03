@@ -35,6 +35,12 @@ extern "C" {
 typedef void * uthread_argument_t;
 typedef void (*uthread_function_t)(uthread_argument_t argument);
 
+enum uthread_type{
+    foreground = 0x0
+   ,background = 0x1
+}uthread_type_t;
+
+
 // Initialize the uthread library.
 // Call uthread_init before using any other functionality of the
 // uthread library. The operating system thread that calls
@@ -45,7 +51,11 @@ void uthread_init();
 
 // Create a user thread to run "function".
 // The created thread is placed at the end of the ready queue.
-void uthread_create(uthread_function_t function, uthread_argument_t argument);
+void uthread_create(uthread_function_t function, uthread_argument_t argument, unsigned int type);
+
+void uthread_create_foreground(uthread_function_t function, uthread_argument_t argument);
+void uthread_create_background(uthread_function_t function, uthread_argument_t argument);
+
 
 // Voluntarily relinquishing the processor to the next thread in the
 // ready queue.
@@ -77,6 +87,8 @@ typedef struct uthread_countdownlatch {
 	unsigned int	units;		// Unit counter
 	dlist_t			queue;		// Waiting threads
 } uthread_countdownlatch_t;
+
+
 
 // Set the initial state of a count-down latch to start with "initial_units" units.
 void uthread_countdownlatch_init(uthread_countdownlatch_t * latch, unsigned int initial_units);
@@ -156,6 +168,10 @@ void uthread_semaphore_wait(uthread_semaphore_t * semaphore);
 //     option for which places the releasing and released thread
 //     should take in the ready queue.
 void uthread_semaphore_post(uthread_semaphore_t * semaphore);
+
+void uthread_sleep( unsigned int millisecondsTimeout );
+
+void uthread_join( unsigned int thread_id );
 
 #ifdef __cplusplus
 }

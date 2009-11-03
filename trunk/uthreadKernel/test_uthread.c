@@ -14,8 +14,12 @@
 #include <stdio.h>
 #include <conio.h>
 #include <time.h>
+#include <windows.h>
 
 #include "uthread.h"
+
+uthread_semaphore_t q2s;
+
 
 ///////////////////////////////////////////////////////////
 //
@@ -39,11 +43,143 @@ void test1a() {
 	printf("\n-:: Test 1 (a) - BEGIN ::-\n\n");
 	test1a_count = 0; // makes test1 non-reentrant
 	for (i = 0; i < 10; ++i) {
-		uthread_create(test1a_thread, (uthread_argument_t)('0' + i));
+		uthread_create_foreground(test1a_thread, (uthread_argument_t)('0' + i));
 	}
 	while (test1a_count != 10) uthread_yield();
 	printf("\n-:: Test 1 (a) -  END  ::-\n");
 }
+
+void question4_thread(uthread_argument_t arg) {
+	int i, c = (int)arg;
+	for (i = 0; i < 16; ++i) {
+		putchar(c);
+        if ((rand() % 4) == 0){
+            putchar('*');
+			uthread_yield();
+        }
+	}
+	//uthread_exit(); // not really needed
+}
+
+void question4(){
+	int i;
+	printf("\n-:: Question 4 (a) - BEGIN ::-\n\n");
+	
+    for (i = 0; i < 100; ++i) {
+        if( (i % 10) == 0 ){
+		  uthread_create_foreground(question4_thread, (uthread_argument_t)('f'));
+        }
+        uthread_create_background(question4_thread, (uthread_argument_t)('b'));
+	}
+}
+
+
+void question6_thread(uthread_argument_t arg) {
+    int i; 
+    for( i = 0; i < 1500; i++ ){
+        printf("Index{%d}, question6_thread -> Method , char {%c} \n", i, (int)arg);
+      if( (i % 4 ) == 0 ) uthread_yield();
+    }
+}
+
+void question6(){
+	int i;
+	printf("\n-:: Question 6 (a) - BEGIN ::-\n\n");
+	
+    printf("Thread Create\n");
+    uthread_create_foreground(question6_thread, (uthread_argument_t)('1'));
+    
+    printf("Thread Before Join\n");
+    uthread_join( 2 );
+    printf("Thread After Join\n");
+}
+
+
+void question3_thread(uthread_argument_t arg) {
+    int i;
+    long start;
+
+    start = GetTickCount();
+    for( i = 0; i < 15000; i++ ){
+        printf("Index{%d}, question3_thread -> Method , char {%c} \n", i, (int)arg);
+      if( (i % 4 ) == 0 ) uthread_yield();
+    }
+
+    printf("%ldms", GetTickCount() - start);
+}
+
+void question3_sleep_thread(uthread_argument_t arg){
+    int start, end, i;
+    start = GetTickCount();
+    printf("Antes de esperar 2000ms\n");
+    uthread_sleep( 2000 );
+    end = GetTickCount();
+    //printf("Depois de esperar %ldms\n", end - start);
+    for( i = 0; i < 1500; i++ ){
+        printf("Sleep %ldms\n", end - start);
+    }
+}
+
+void question3(){
+	int i;
+	printf("\n-:: Question 3 (a) - BEGIN ::-\n\n");
+	
+    uthread_create_foreground(question3_thread, (uthread_argument_t)('1'));
+    uthread_create_foreground(question3_sleep_thread, (uthread_argument_t)('1'));
+}
+
+void question2_1_thread(uthread_argument_t arg) {
+    printf( "Start question2_1_thread;\n" );
+    uthread_semaphore_wait( &q2s );
+    printf( "Yield question2_1_thread;\n" );
+    uthread_yield();
+    printf( "post question2_1_thread;\n" );
+    uthread_semaphore_post( &q2s );
+}
+
+void question2_2_thread(uthread_argument_t arg) {
+    printf( "Start question2_2_thread;\n" );
+    uthread_semaphore_wait( &q2s );
+    printf( "Yield question2_2_thread;\n" );
+    uthread_yield();
+    printf( "post question2_2_thread;\n" );
+    uthread_semaphore_post( &q2s );
+}
+
+void question2_3_thread(uthread_argument_t arg) {
+    printf( "Start question2_3_thread;\n" );
+    uthread_semaphore_wait_n( &q2s, 3 );
+    printf( "Yield question2_3_thread;\n" );
+    uthread_yield();
+    printf( "post question2_3_thread;\n" );
+    uthread_semaphore_post( &q2s );
+    printf( "post question2_3_thread;\n" );
+    uthread_semaphore_post( &q2s );
+    printf( "post question2_3_thread;\n" );
+    uthread_semaphore_post( &q2s );
+}
+
+void question2_4_thread(uthread_argument_t arg) {
+    printf( "Start question2_4_thread;\n" );
+    uthread_semaphore_wait( &q2s );
+    printf( "Yield question2_4_thread;\n" );
+    uthread_yield();
+    printf( "post question2_4_thread;\n" );
+    uthread_semaphore_post( &q2s );
+}
+
+void question2(){
+	printf("\n-:: Question 2 (a) - BEGIN ::-\n\n");
+
+    uthread_semaphore_init( &q2s, 3 );
+
+    uthread_create_foreground(question2_1_thread, (uthread_argument_t)('1'));
+    uthread_create_foreground(question2_2_thread, (uthread_argument_t)('1'));
+    uthread_create_foreground(question2_3_thread, (uthread_argument_t)('1'));
+    uthread_create_foreground(question2_4_thread, (uthread_argument_t)('1'));
+}
+
+
 //
 ///////////////////////////////////////////////////////////
 
@@ -86,7 +222,7 @@ void test1b() {
 	for (i = 0; i < TEST1B_COUNT; ++i) {
 		args[i].thread_number = '0' + i;
 		args[i].sharedLatch = &latch;
-		uthread_create(test1b_thread, (uthread_argument_t) &args[i]);
+		uthread_create_foreground(test1b_thread, (uthread_argument_t) &args[i]);
 	}
 	uthread_countdownlatch_await(&latch);	// Passive wait !
 	printf("\n-:: Test 1 (b) -  END  ::-\n");
@@ -171,9 +307,9 @@ void test2() {
 	uthread_mutex_init(&mutex);
 	printf("\n-:: Test 2 - BEGIN ::-\n\n");
 	test2_count = 0; // makes test2 non-reentrant
-	uthread_create(test2_thread1, &mutex);
-	uthread_create(test2_thread2, &mutex);
-	uthread_create(test2_thread3, &mutex);
+	uthread_create_foreground(test2_thread1, &mutex);
+	uthread_create_foreground(test2_thread2, &mutex);
+	uthread_create_foreground(test2_thread3, &mutex);
 	while (test2_count != 3) uthread_yield();
 	printf("\n-:: Test 2 -  END  ::-\n");
 }
@@ -296,12 +432,12 @@ void test3() {
 	printf("\n-:: Test 3 - BEGIN ::-\n\n");
 	test3_countp = 0; // makes test3 non-reentrant
 	test3_countc = 0; // makes test3 non-reentrant
-	uthread_create(test3_consumer_thread, &test_mailbox);
-	uthread_create(test3_consumer_thread, &test_mailbox);
-	uthread_create(test3_producer_thread, &test_mailbox);
-	uthread_create(test3_producer_thread, &test_mailbox);
-	uthread_create(test3_producer_thread, &test_mailbox);
-	uthread_create(test3_producer_thread, &test_mailbox);
+	uthread_create_foreground(test3_consumer_thread, &test_mailbox);
+	uthread_create_foreground(test3_consumer_thread, &test_mailbox);
+	uthread_create_foreground(test3_producer_thread, &test_mailbox);
+	uthread_create_foreground(test3_producer_thread, &test_mailbox);
+	uthread_create_foreground(test3_producer_thread, &test_mailbox);
+	uthread_create_foreground(test3_producer_thread, &test_mailbox);
 	while (test3_countp != 4) uthread_yield();
 	mailbox_post(&test_mailbox, (void *)-1); // will terminate one consumer
 	mailbox_post(&test_mailbox, (void *)-1); // will terminate one consumer
@@ -313,18 +449,37 @@ void test3() {
 
 int main()
 {
+    int option = 2;
+    long a, b;
 	srand((unsigned int)time(NULL));
 
+
+    a = GetTickCount();
+    Sleep(1000);
+    b = GetTickCount();
+    printf ( "a=%ld; b=%ld; B - A = %ld\n", a, b, b-a );
+
+    printf("\n-:: START  ::-\n");
 	uthread_init();
 	{
-		test1a();
-		//test1b();
-		//test2();
-		//test3();
-
-		//while (!kbhit()) uthread_yield();
+        switch( option ){
+            case 2:
+                question2();
+                break;
+            case 3:
+                question3();
+                break;
+            case 4:
+                question4();
+                break;
+            case 6:
+                question6();
+                break;
+        }
 	}
-	uthread_exit();
+
+    uthread_exit();
+    printf("\n-:: END  ::-\n");
 	
 	return 0;
 }

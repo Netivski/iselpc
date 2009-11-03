@@ -10,7 +10,7 @@
   <Struct Name="uthread">
     <Position X="0.75" Y="0.5" Width="1.5" />
     <TypeIdentifier>
-      <HashCode>gQAAAAAAAAAAIAAAAgAAAAAAAAAgAACAAAAAAAAAAAA=</HashCode>
+      <HashCode>gQAAAAAAAAAAIAAAAgAAAAAAACAgAACAAAAAAAAAAAA=</HashCode>
       <FileName>uthread.c</FileName>
     </TypeIdentifier>
   </Struct>
