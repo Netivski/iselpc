@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <windows.h>
+#include <time.h>
 
 #include "lists.h"
 #include "uthread.h"
@@ -39,6 +40,7 @@ typedef struct uthread_context {
 	void      (* ret_addr)();
 } uthread_context_t;
 
+
 // Data structure to hold information about a user thread.
 // The first entry must be a dlist_node_t as we use
 // intrusive lists to support the ready queue and the wait
@@ -50,6 +52,10 @@ typedef struct uthread {
 	uthread_argument_t  argument;    // argument to thread function
 	unsigned char     * pStackArena; // memory block for the thread's stack
 	uthread_context_t * pContext_;   // pointer to context saved in the thread's stack
+    unsigned int        waitn;
+    unsigned char       type;
+    unsigned long       sleep_absolute_time;
+    dlist_node_t        joined_thread;
 } uthread_t;
 
 ///////////////////////////////////////////////////////////
@@ -59,6 +65,7 @@ typedef struct uthread {
 
 // Number of existing user threads.
 static unsigned int uthread_internal_numThreads;
+static uthread_countdownlatch_t foreground_latch;
 
 // The ready queue is an intrusive list of uthread_t instances.
 // All the threads which are READY to run are in this queue, including
@@ -75,6 +82,10 @@ static uthread_t * uthread_internal_pRunningThread;
 // the running state. This variable, if not NULL, holds a reference to
 // a thread that has terminated and needs to have its resources freed.
 static uthread_t * uthread_internal_pZombieThread;
+
+static uthread_t * uthread_cThreads[1024]; //cThreads == Current Threads
+
+static uthread_t *sQueue = NULL; //sQueue == Sleep Queue
 
 ///////////////////////////////////////////////////////////
 //
@@ -106,6 +117,26 @@ static unsigned int uthread_internal_generateUniqueThreadId() {
 	return s_utid++;
 }
 
+
+void uthread_sleep_wake_up(){
+    uthread_sleep_element_t *aux; 
+    uthread_t               *sThread; //sThread == Sleep Thread
+    long                     cTicks;  
+     //Trevial Case
+    if( sQueue == NULL ) return;  //Evita o System Call para obter os ticks
+
+    cTicks = uthread_get_internal_ticks();
+    if( sQueue->absolute_time > cTicks ) return;
+
+     sThread = sQueue->thread;
+     aux     = sQueue;
+     sQueue  = sQueue->next; //Move Next
+     free( aux );
+
+     dlist_enqueue(&uthread_internal_readyQueue, &(sThread->node));
+     uthread_sleep_wake_up();
+}
+
 ///////////////////////////////////////////////////////////
 //
 // uthread library main functions.
@@ -117,12 +148,43 @@ static unsigned int uthread_internal_generateUniqueThreadId() {
 // uthread_init becomes the main user thread. This must be the
 // last user thread to call uthread_exit, which means it must
 // wait for all other user threads to terminate.
+
+int uthread_compare_sleep_absolute_time(uthread_t * t1, uthread_t * t2){
+    return t1->sleep_absolute_time - t2->sleep_absolute_time;
+}
+
+int uthread_compare_waitn(uthread_t * t1, uthread_t * t2){
+    return t1->waitn - t2->waitn;
+}
+
+void dlist_sorted_push( dlist_t *pHeader, dlist_t *pNode, int (*uthread_compareTo)( uthread_t * t1, uthread_t * t2 )  ){
+    
+    if( dlist_isEmpty(pHeader) ){
+        dlist_enqueue( pHeader, pNode );
+    }else{
+
+        if( ((uthread_t *)dlist_getLast(pHeader))->sleep_absolute_time < ((uthread_t *)pNode)->sleep_absolute_time ){
+            dlist_enqueue( pHeader, pNode );
+        }else{
+            dlist_t * tempNext;
+            dlist_t * aux = pHeader;
+            while( 
+                        ( ( aux = dlist_getPrevious( pHeader, aux) ) != 0 ) 
+                      && ( uthread_compareTo( (uthread_t *)aux, (uthread_t *)pNode ) > 0 ) 
+                 );
+
+            if( aux == NULL ) aux = pHeader;
+
+            tempNext = aux->pNextNode;
+            aux->pNextNode = pNode;
+            pNode->pPrevNode = aux;
+            pNode->pNextNode = tempNext;
+            pNode->pNextNode->pPrevNode = pNode;
+        }
+    }
+}
+
 void uthread_init() {
-	
-	uthread_t * pMainThread;
-	
-	dlist_init(&uthread_internal_readyQueue);
-	
 	pMainThread = (uthread_t *)malloc(sizeof(uthread_t));
 	assert(pMainThread != NULL);
 	pMainThread->tid = 1;            // the main thread has a fixed id of 1
@@ -131,82 +193,18 @@ void uthread_init() {
 	pMainThread->pStackArena = NULL; // uses the operating system thread's stack
 	pMainThread->pContext_ = 0;      // will be set after the first context switch
 
+    dlist_init( &(pMainThread->joined_thread ) );
+
 	// Initialize the counter of user threads.
-	uthread_internal_numThreads = 1;
+	uthread_internal_numThreads           = 1;
+    pMainThread->type = foreground;
+    pMainThread->sleep_absolute_time = 0;
+    uthread_countdownlatch_init( &foreground_latch, 0 );
 	
 	// the main thread is set as the first ready thread
 	dlist_enqueue(&uthread_internal_readyQueue, &(pMainThread->node));
 	// the main thread is the starts as the running thread
 	uthread_internal_pRunningThread = pMainThread;
-}
-
-// Create a user thread to run "function".
-// The created thread is placed at the end of the ready queue.
-void uthread_create(uthread_function_t function, uthread_argument_t argument) {
-
-	uthread_t * pThread;
-	
-	// Dinamically allocate an instance of uthread_t
-	pThread = (uthread_t *)malloc(sizeof(uthread_t));
-	assert(pThread != NULL);
-
-	pThread->tid = uthread_internal_generateUniqueThreadId();
-	pThread->function = function;
-	pThread->argument = argument;
-	pThread->pStackArena = (unsigned char *)malloc(STACK_SIZE);
-	assert(pThread->pStackArena != NULL);
-	memset(pThread->pStackArena, 0, STACK_SIZE); // zero all the stack space
-
-	// Map a uthread_context_t on the thread's stack.
-	// We'll use it to save the initial context of the thread.
-	//
-	// +------------+
-	// | 0x00000000 |    <- highest word of a thread's stack space
-	// +============+      (needs to be set to 0 for Visual Studio to
-	// |  ret_addr  | \     correctly present a thread's call stack)
-	// +------------+  |
-	// |  reg_ebp   |  |
-	// +------------+  |
-	// |  reg_ebx   |   > uthread_context_t mapped on the stack
-	// +------------+  |
-	// |  reg_esi   |  |
-	// +------------+  |
-	// |  reg_edi   | /  <- stack pointer will be set to this address
-	// +============+       at the next context switch to this thread
-	// |            | \
-	// +------------+  |
-	// |     :      |  |
-	//       :          > remaining stack space
-	// |     :      |  |
-	// +------------+  |
-	// |            | /  <- lowest word of a thread's stack space
-	// +------------+      (pStackArena always points to this location)
-	//
-	pThread->pContext_ = (uthread_context_t *)(pThread->pStackArena
-	                                                  + STACK_SIZE
-	                                                  - sizeof(unsigned int)
-	                                                  - sizeof(uthread_context_t));
-
-	// Set the thread's initial context through pContext_.
-	// 1. Set the initial values of EBP, EBX, ESI and EDI.
-	pThread->pContext_->reg_edi = 0x33333333; // this value is just for debug purposes
-	pThread->pContext_->reg_esi = 0x22222222; // ditto
-	pThread->pContext_->reg_ebx = 0x11111111; // ditto
-	pThread->pContext_->reg_ebp = 0x00000000; // EBP must be zero, for Visual Studio to
-	                                          // correctly present a thread's call stack.
-	// 2. Place the address of uthread_initial_start on the stack.
-	//    During the first context switch to this thread, after popping
-	//    the values of the "saved" registers, a ret instruction will
-	//    place this address on the processor's instruction pointer.
-	pThread->pContext_->ret_addr = uthread_internal_start;
-
-	// One more user thread.
-	++uthread_internal_numThreads;
-	
-	// Threads are born ready to run and are placed at the end of the
-	// ready queue. The thread will run when it gets to the head of
-	// the queue.
-	dlist_enqueue(&uthread_internal_readyQueue, &(pThread->node));
 }
 
 // Voluntarily relinquishing the processor to the next thread in the
@@ -216,8 +214,14 @@ void uthread_create(uthread_function_t function, uthread_argument_t argument) {
 // run, calling uthread_yield does not change the running thread.
 void uthread_yield() {
 	// Remove the running thread from the head of the ready queue.
-	uthread_t * pRunningThread = (uthread_t *)dlist_dequeue(&uthread_internal_readyQueue);
-	// Do a quick test to check whether we have another ready thread or not.
+	uthread_t * pRunningThread;
+    uthread_sleep_wake_up();
+    
+    pRunningThread = (uthread_t *)dlist_dequeue(&uthread_internal_readyQueue);
+
+    //printf("*\n");
+
+    // Do a quick test to check whether we have another ready thread or not.
 	if (!dlist_isEmpty(&uthread_internal_readyQueue)) {
 		// We have another ready thread, so place the running thread at the end
 		// of the ready queue and call schedule to perform a context switch.
@@ -240,8 +244,19 @@ void uthread_yield() {
 // user threads have terminated and it releases all the internal
 // resources of the uthread library.
 void uthread_exit() {
+
+    if( !dlist_isEmpty( &(uthread_internal_pRunningThread->joined_thread)) ){
+	    uthread_t * pThread = (uthread_t *)dlist_dequeue(&(uthread_internal_pRunningThread->joined_thread));
+	    dlist_enqueue(&uthread_internal_readyQueue, &(pThread->node));
+    }
+
+    //printf( "%d\n",  dlist_isEmpty( &(uthread_internal_pRunningThread->joined_thread) ));
+
 	// Are we trying to exit from the main thread?
 	if (uthread_internal_pRunningThread->function != NULL) {
+        uthread_cThreads[ uthread_internal_pRunningThread->tid ] = NULL;
+        if( uthread_internal_pRunningThread->type == foreground  ) uthread_countdownlatch_countdown( &foreground_latch );
+
 		// No. A normal user thread is terminating.
 		// Remove it from the ready queue.
 		dlist_remove(&uthread_internal_readyQueue, &(uthread_internal_pRunningThread->node));
@@ -254,11 +269,14 @@ void uthread_exit() {
 		uthread_internal_schedule();
 		assert(0); // should never get here
 	} else {
+
+        uthread_countdownlatch_await( &foreground_latch );
+
 		// We're trying to exit from the main thread.
 		// This should be the last user thread to exit.
 		// An alternative to this assert is to keep a list of all threads
 		// and cleanup all their resources here.
-		assert(uthread_internal_numThreads == 1);
+		//assert(uthread_internal_numThreads == 1); /????? 
 		// OK to cleanup main thread.
 		dlist_init(&uthread_internal_readyQueue);
 		free(uthread_internal_pRunningThread);
@@ -392,6 +410,10 @@ void uthread_countdownlatch_await(uthread_countdownlatch_t * latch)
 	}
 }
 
+void uthread_countdownlatch_countup(uthread_countdownlatch_t * latch){
+    latch->units += 1;
+}
+
 // Decrements the current unit count.
 // If the count reaches 0, all waiting threads are unblocked, meaning, removed from the
 // latch's queue and appended to the ready list.
@@ -421,6 +443,8 @@ void uthread_countdownlatch_countdown(uthread_countdownlatch_t * latch)
 		}
 	} // else: latch unit count as not yet reached 0.
 }
+
+
 
 
 ///////////////////////////////////////////////////////////
@@ -502,46 +526,29 @@ void uthread_semaphore_init(uthread_semaphore_t * pSemaphore, unsigned int initi
 	pSemaphore->permits = initial_permits;
 }
 
+
+void uthread_semaphore_wait_n(uthread_semaphore_t * pSemaphore, unsigned int n) {
+		if (pSemaphore->permits >= n) {
+		// There are permits available. Get one and keep running.
+		 pSemaphore->permits -= n;
+	} else {
+        uthread_internal_pRunningThread->waitn = n;
+		// No permits available. Block on the semaphore queue and schedule another thread.
+		// 1. Remove *running* thread from ready list.
+		dlist_remove(&uthread_internal_readyQueue, &(uthread_internal_pRunningThread->node));
+		// 2. Insert *running* thread at the end of the semaphore queue.
+		dlist_enqueue(&(pSemaphore->queue), &(uthread_internal_pRunningThread->node));
+		// 3. Context switch to the next ready thread.
+		uthread_internal_schedule();
+	}
+}
+
 // Get one unit from the semaphore.
 // If there are no units available, the calling thread is blocked in the
 // semaphore's internal wait queue until a unit is made available by a
 // call to "post". Blocked threads are serviced in FIFO order. 
 void uthread_semaphore_wait(uthread_semaphore_t * pSemaphore) {
-	if (pSemaphore->permits > 0) {
-		// There are permits available. Get one and keep running.
-		--(pSemaphore->permits);
-	} else {
-		// No permits available. Block on the semaphore queue and schedule another thread.
-		// 1. Remove *running* thread from ready list.
-		dlist_remove(&uthread_internal_readyQueue, &(uthread_internal_pRunningThread->node));
-		// 2. Insert *running* thread at the end of the semaphore queue.
-		dlist_enqueue(&(pSemaphore->queue), &(uthread_internal_pRunningThread->node));
-		// 3. Context switch to the next ready thread.
-		uthread_internal_schedule();
-	}
-}
-
-void void uthread_semaphore_wait_n(uthread_semaphore_t * pSemaphore, unsigned int n) {
-		if (pSemaphore->permits > n) {
-		// There are permits available. Get one and keep running.
-		--(pSemaphore->permits);
-	} else {
-		// No permits available. Block on the semaphore queue and schedule another thread.
-		// 1. Remove *running* thread from ready list.
-		dlist_remove(&uthread_internal_readyQueue, &(uthread_internal_pRunningThread->node));
-		// 2. Insert *running* thread at the end of the semaphore queue.
-		dlist_enqueue(&(pSemaphore->queue), &(uthread_internal_pRunningThread->node));
-		// 3. Context switch to the next ready thread.
-		uthread_internal_schedule();
-	}
-}
-
-void uthread_sleep( unsigned int millisecondsTimeout ){
-	//Trivial case
-	if( millisecondsTimeout == 0 ) uthread_yield();
-
-
-
+	uthread_semaphore_wait_n( pSemaphore, 1 );
 }
 
 // Add one unit to the semaphore.
@@ -558,4 +565,162 @@ void uthread_semaphore_post(uthread_semaphore_t * pSemaphore) {
 		dlist_enqueue(&uthread_internal_readyQueue, &(pThread->node));
 		// The woken thread will execute after getting to the front of the ready queue.
 	}
+}
+
+long uthread_get_internal_ticks(){
+    return( GetTickCount() );
+}
+
+uthread_sleep_element_t* uthread_sleep_create(  ){
+    return ( (uthread_sleep_element_t*)malloc( sizeof(uthread_sleep_element_t) ) );
+}
+
+void uthread_sleep( unsigned int millisecondsTimeout ){
+    uthread_sleep_element_t* rObj    = NULL; 
+    uthread_sleep_element_t* aux     = NULL;
+    uthread_sleep_element_t* last    = NULL;
+    unsigned char            addLast = 1;
+    uthread_t              * pThread;
+
+	//Trivial case
+    if( millisecondsTimeout == 0 ){
+        uthread_yield(); //
+        return;
+    }
+
+    rObj = uthread_sleep_create();
+    rObj->absolute_time = uthread_get_internal_ticks() + millisecondsTimeout;
+    rObj->next          = NULL;
+    rObj->thread        = uthread_internal_pRunningThread;
+
+    if( sQueue == NULL ){ //First Element
+        sQueue =  rObj;
+    }else{
+        aux = last = sQueue; //Pointer to First Element
+        do{
+            if( aux->absolute_time > rObj->absolute_time ){
+                rObj->next = aux;
+                if( last == sQueue ) sQueue = rObj;
+                addLast = 0;
+                break;
+            }
+            
+            last = aux;
+        }while( (aux  = aux->next) != NULL );
+
+        if( addLast ){
+            last->next = rObj;
+        }
+    }
+ 
+	pThread = (uthread_t *)dlist_dequeue(&(uthread_internal_pRunningThread));
+	uthread_internal_schedule();
+
+}
+
+
+void uthread_join( unsigned int thread_id ){
+    uthread_t * pThread; 
+
+    if( uthread_cThreads[ thread_id ] == NULL ) return;
+
+	pThread = (uthread_t *)dlist_dequeue(&(uthread_internal_pRunningThread));
+	dlist_enqueue(&(uthread_cThreads[ thread_id ]->joined_thread), &(pThread->node));
+
+    uthread_internal_schedule();
+}
+
+// Create a user thread to run "function".
+// The created thread is placed at the end of the ready queue.
+void uthread_create(uthread_function_t function, uthread_argument_t argument, unsigned int type) {
+
+	uthread_t * pThread;
+	
+	// Dinamically allocate an instance of uthread_t
+	pThread = (uthread_t *)malloc(sizeof(uthread_t));
+	assert(pThread != NULL);
+    dlist_init( &(pThread->joined_thread) );
+	pThread->tid = uthread_internal_generateUniqueThreadId();
+    uthread_cThreads[ pThread->tid ] = pThread;
+	pThread->function = function;
+	pThread->argument = argument;
+	pThread->pStackArena = (unsigned char *)malloc(STACK_SIZE);
+	assert(pThread->pStackArena != NULL);
+	memset(pThread->pStackArena, 0, STACK_SIZE); // zero all the stack space
+
+	// Map a uthread_context_t on the thread's stack.
+	// We'll use it to save the initial context of the thread.
+	//
+	// +------------+
+	// | 0x00000000 |    <- highest word of a thread's stack space
+	// +============+      (needs to be set to 0 for Visual Studio to
+	// |  ret_addr  | \     correctly present a thread's call stack)
+	// +------------+  |
+	// |  reg_ebp   |  |
+	// +------------+  |
+	// |  reg_ebx   |   > uthread_context_t mapped on the stack
+	// +------------+  |
+	// |  reg_esi   |  |
+	// +------------+  |
+	// |  reg_edi   | /  <- stack pointer will be set to this address
+	// +============+       at the next context switch to this thread
+	// |            | \
+	// +------------+  |
+	// |     :      |  |
+	//       :          > remaining stack space
+	// |     :      |  |
+	// +------------+  |
+	// |            | /  <- lowest word of a thread's stack space
+	// +------------+      (pStackArena always points to this location)
+	//
+	pThread->pContext_ = (uthread_context_t *)(pThread->pStackArena
+	                                                  + STACK_SIZE
+	                                                  - sizeof(unsigned int)
+	                                                  - sizeof(uthread_context_t));
+
+	// Set the thread's initial context through pContext_.
+	// 1. Set the initial values of EBP, EBX, ESI and EDI.
+	pThread->pContext_->reg_edi = 0x33333333; // this value is just for debug purposes
+	pThread->pContext_->reg_esi = 0x22222222; // ditto
+	pThread->pContext_->reg_ebx = 0x11111111; // ditto
+	pThread->pContext_->reg_ebp = 0x00000000; // EBP must be zero, for Visual Studio to
+	                                          // correctly present a thread's call stack.
+	// 2. Place the address of uthread_initial_start on the stack.
+	//    During the first context switch to this thread, after popping
+	//    the values of the "saved" registers, a ret instruction will
+	//    place this address on the processor's instruction pointer.
+	pThread->pContext_->ret_addr = uthread_internal_start;
+
+    pThread->type                = type;
+    pThread->sleep_absolute_time = 0;
+	// One more user thread.
+	++uthread_internal_numThreads;
+    if( type == foreground ) uthread_countdownlatch_countup( &foreground_latch );
+
+	// Threads are born ready to run and are placed at the end of the
+	// ready queue. The thread will run when it gets to the head of
+	// the queue.
+	dlist_enqueue(&uthread_internal_readyQueue, &(pThread->node));
+
+    
+}
+
+void uthread_create_foreground(uthread_function_t function, uthread_argument_t argument){
+    //uthread_sleep_element_t* aux  = NULL;
+
+    //uthread_sleep( 10 ); 
+    //uthread_sleep( 7 );
+    //uthread_sleep( 3 );
+    //uthread_sleep( 12 );
+
+    //aux = sQueue;
+    //do{
+    //    printf( "%d\n", aux->absolute_time );
+    //}while( ( aux = aux->next ) != NULL );
+
+    uthread_create(function, argument, foreground );
+}
+
+void uthread_create_background(uthread_function_t function, uthread_argument_t argument){
+  uthread_create(function, argument, background );
 }
