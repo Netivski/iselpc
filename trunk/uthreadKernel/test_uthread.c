@@ -19,6 +19,7 @@
 #include "uthread.h"
 
 uthread_semaphore_t q2s;
+uthread_monitor_t   q5Monitor;
 
 
 ///////////////////////////////////////////////////////////
@@ -49,84 +50,7 @@ void test1a() {
 	printf("\n-:: Test 1 (a) -  END  ::-\n");
 }
 
-void question4_thread(uthread_argument_t arg) {
-	int i, c = (int)arg;
-	for (i = 0; i < 16; ++i) {
-		putchar(c);
-        if ((rand() % 4) == 0){
-            putchar('*');
-			uthread_yield();
-        }
-	}
-	//uthread_exit(); // not really needed
-}
 
-void question4(){
-	int i;
-	printf("\n-:: Question 4 (a) - BEGIN ::-\n\n");
-	
-    for (i = 0; i < 100; ++i) {
-        if( (i % 10) == 0 ){
-		  uthread_create_foreground(question4_thread, (uthread_argument_t)('f'));
-        }
-        uthread_create_background(question4_thread, (uthread_argument_t)('b'));
-	}
-}
-
-
-void question6_thread(uthread_argument_t arg) {
-    int i; 
-    for( i = 0; i < 1500; i++ ){
-        printf("Index{%d}, question6_thread -> Method , char {%c} \n", i, (int)arg);
-      if( (i % 4 ) == 0 ) uthread_yield();
-    }
-}
-
-void question6(){
-	int i;
-	printf("\n-:: Question 6 (a) - BEGIN ::-\n\n");
-	
-    printf("Thread Create\n");
-    uthread_create_foreground(question6_thread, (uthread_argument_t)('1'));
-    
-    printf("Thread Before Join\n");
-    uthread_join( 2 );
-    printf("Thread After Join\n");
-}
-
-
-void question3_thread(uthread_argument_t arg) {
-    int i;
-    long start;
-
-    start = GetTickCount();
-    for( i = 0; i < 15000; i++ ){
-        printf("Index{%d}, question3_thread -> Method , char {%c} \n", i, (int)arg);
-      if( (i % 4 ) == 0 ) uthread_yield();
-    }
-
-    printf("%ldms", GetTickCount() - start);
-}
-
-void question3_sleep_thread(uthread_argument_t arg){
-    int start, end, i;
-    start = GetTickCount();
-    printf("Antes de esperar 2000ms\n");
-    uthread_sleep( 2000 );
-    end = GetTickCount();
-    //printf("Depois de esperar %ldms\n", end - start);
-    for( i = 0; i < 1500; i++ ){
-        printf("Sleep %ldms\n", end - start);
-    }
-}
-
-void question3(){
-	int i;
-	printf("\n-:: Question 3 (a) - BEGIN ::-\n\n");
-	
-    uthread_create_foreground(question3_thread, (uthread_argument_t)('1'));
-    uthread_create_foreground(question3_sleep_thread, (uthread_argument_t)('1'));
-}
 
 void question2_1_thread(uthread_argument_t arg) {
     printf( "Start question2_1_thread;\n" );
@@ -179,6 +103,123 @@ void question2(){
     uthread_create_foreground(question2_4_thread, (uthread_argument_t)('1'));
 }
 
+void question3_thread(uthread_argument_t arg) {
+    int i;
+    long start;
+
+    start = GetTickCount();
+    for( i = 0; i < 15000; i++ ){
+        printf("Index{%d}, question3_thread -> Method , char {%c} \n", i, (int)arg);
+      if( (i % 4 ) == 0 ) uthread_yield();
+    }
+
+    printf("%ldms", GetTickCount() - start);
+}
+
+void question3_sleep_thread(uthread_argument_t arg){
+    int start, end, i;
+    start = GetTickCount();
+    printf("Antes de esperar 2000ms\n");
+    uthread_sleep( 2000 );
+    end = GetTickCount();
+    //printf("Depois de esperar %ldms\n", end - start);
+    for( i = 0; i < 1500; i++ ){
+        printf("Sleep %ldms\n", end - start);
+    }
+}
+
+void question3(){
+	int i;
+	printf("\n-:: Question 3 (a) - BEGIN ::-\n\n");
+	
+    uthread_create_foreground(question3_thread, (uthread_argument_t)('1'));
+    uthread_create_foreground(question3_sleep_thread, (uthread_argument_t)('1'));
+}
+
+void question4_thread(uthread_argument_t arg) {
+	int i, c = (int)arg;
+	for (i = 0; i < 16; ++i) {
+		putchar(c);
+        if ((rand() % 4) == 0){
+            putchar('*');
+			uthread_yield();
+        }
+	}
+	//uthread_exit(); // not really needed
+}
+
+void question4(){
+	int i;
+	printf("\n-:: Question 4 (a) - BEGIN ::-\n\n");
+	
+    for (i = 0; i < 100; ++i) {
+        if( (i % 10) == 0 ){
+		  uthread_create_foreground(question4_thread, (uthread_argument_t)('f'));
+        }
+        uthread_create_background(question4_thread, (uthread_argument_t)('b'));
+	}
+}
+
+void question5_thread1(uthread_argument_t arg) {
+    printf("Start Thread 1\n");
+    uthread_monitor_enter( &q5Monitor );
+    //Faz cenas ... 
+
+       //Não há condições psicológicas para ...
+       //O lock é removido na primitiva de wait
+       uthread_monitor_wait( &q5Monitor );
+
+       //Pela implementação do padrão Lampson e Redell
+       //seria necesário verificar as condições que levaram ao wait.
+       //Implementação com recurso a um while(!condição){ wait(); }
+       //Neste cenário aparece o conceito de notificação espúria 
+
+    //Fim de Faz Cenas ...
+    printf("End Thread 1\n");
+}
+
+void question5_thread2(uthread_argument_t arg) {
+    printf("Start Thread 2\n");
+    uthread_monitor_enter( &q5Monitor );
+    //Faz cenas ... 
+    uthread_monitor_pulse( &q5Monitor );
+    uthread_monitor_exit( &q5Monitor );
+    printf("End Thread 2\n");
+}
+
+void question5(){
+	int i;
+	printf("\n-:: Question 5 (a) - BEGIN ::-\n\n");
+	
+    printf("Init Monitor\n");
+    uthread_monitor_init( &q5Monitor );
+
+    printf("Thread Create 1 & 2\n");
+    uthread_create_foreground(question5_thread1, (uthread_argument_t)('1'));
+    uthread_create_foreground(question5_thread2, (uthread_argument_t)('1'));
+}
+
+
+
+void question6_thread(uthread_argument_t arg) {
+    int i; 
+    for( i = 0; i < 1500; i++ ){
+        printf("Index{%d}, question6_thread -> Method , char {%c} \n", i, (int)arg);
+      if( (i % 4 ) == 0 ) uthread_yield();
+    }
+}
+
+void question6(){
+	int i;
+	printf("\n-:: Question 6 (a) - BEGIN ::-\n\n");
+	
+    printf("Thread Create\n");
+    uthread_create_foreground(question6_thread, (uthread_argument_t)('1'));
+    
+    printf("Thread Before Join\n");
+    uthread_join( 2 );
+    printf("Thread After Join\n");
+}
 
 //
 ///////////////////////////////////////////////////////////
@@ -449,7 +490,7 @@ void test3() {
 
 int main()
 {
-    int option = 6;
+    int option = 5;
     long a, b;
 	srand((unsigned int)time(NULL));
 
@@ -471,6 +512,9 @@ int main()
                 break;
             case 4:
                 question4();
+                break;
+            case 5:
+                question5();
                 break;
             case 6:
                 question6();

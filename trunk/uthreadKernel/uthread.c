@@ -525,15 +525,19 @@ void uthread_monitor_init( uthread_monitor_t * monitor ){
 
 }
 void uthread_monitor_enter( uthread_monitor_t * monitor ){
+    uthread_mutex_lock( &(monitor->lock) );
 }
 
 void uthread_monitor_exit( uthread_monitor_t * monitor ){
+    uthread_mutex_unlock( &(monitor->lock) );
 }
 
 void uthread_monitor_wait( uthread_monitor_t * monitor ){
+
     dlist_remove(&uthread_internal_readyQueue, &(uthread_internal_pRunningThread->node));
     dlist_enqueue( &(monitor->cv), &(uthread_internal_pRunningThread->node) );
-    
+
+    if( monitor->lock.owner == uthread_internal_pRunningThread->tid ) uthread_mutex_unlock( &(monitor->lock) );
     uthread_internal_schedule();
 }
 
@@ -541,7 +545,8 @@ void uthread_monitor_pulse( uthread_monitor_t * monitor ){
     uthread_t *uTread; 
     if( !dlist_isEmpty( &(monitor->cv) ) ){
         uTread = dlist_dequeue( &(monitor->cv) );
-        dlist_enqueue(&uthread_internal_readyQueue, &(uTread->node));
+        dlist_enqueue(&uthread_internal_readyQueue, &(uTread->node)); 
+        //Implementação pelo padrão Lampson e Redell  
     }
 }
 
@@ -549,7 +554,8 @@ void uthread_monitor_pulseall( uthread_monitor_t * monitor ){
     uthread_t *uTread; 
     while( !dlist_isEmpty( &(monitor->cv) ) ){
         uTread = dlist_dequeue( &(monitor->cv) );
-        dlist_enqueue(&uthread_internal_readyQueue, &(uTread->node));
+        dlist_enqueue(&uthread_internal_readyQueue, &(uTread->node)); 
+        //Implementação pelo padrão Lampson e Redell  
     }
 }
 
