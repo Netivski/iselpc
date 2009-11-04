@@ -139,6 +139,23 @@ void uthread_mutex_unlock(uthread_mutex_t * mutex);
 
 ///////////////////////////////////////////////////////////
 //
+// uthread_monitor_t
+//
+typedef struct uthread_monitor {
+	uthread_mutex_t lock; // unit counter
+	dlist_t         cv;   // waiting threads
+} uthread_monitor_t;
+
+void uthread_monitor_init( uthread_monitor_t * monitor );
+void uthread_monitor_enter( uthread_monitor_t * monitor );
+void uthread_monitor_exit( uthread_monitor_t * monitor );
+void uthread_monitor_wait( uthread_monitor_t * monitor );
+void uthread_monitor_pulse( uthread_monitor_t * monitor );
+void uthread_monitor_pulseall( uthread_monitor_t * monitor );
+
+
+///////////////////////////////////////////////////////////
+//
 // uthread_semaphore_t
 //
 
