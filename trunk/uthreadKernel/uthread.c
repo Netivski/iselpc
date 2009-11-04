@@ -120,7 +120,7 @@ void uthread_sleep_wake_up(){
     uthread_t   *sThread; //sThread == Sleep Thread
     long         cTicks;  
     
-    //Trevial Case
+    //Trivial Case
     if( dlist_isEmpty(&uthread_internal_sleepQueue) ) return;  //Evita o System Call para obter os ticks
 
     cTicks = uthread_get_internal_ticks();
