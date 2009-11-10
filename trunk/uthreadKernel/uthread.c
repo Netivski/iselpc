@@ -243,13 +243,12 @@ void uthread_yield() {
 // user threads have terminated and it releases all the internal
 // resources of the uthread library.
 void uthread_exit() {
+    uthread_t * pThread;
 
-    if( !dlist_isEmpty( &(uthread_internal_pRunningThread->joined_thread)) ){
-	    uthread_t * pThread = (uthread_t *)dlist_dequeue(&(uthread_internal_pRunningThread->joined_thread));
+    while( !dlist_isEmpty( &(uthread_internal_pRunningThread->joined_thread)) ){
+	    pThread = (uthread_t *)dlist_dequeue(&(uthread_internal_pRunningThread->joined_thread));
 	    dlist_enqueue(&uthread_internal_readyQueue, &(pThread->node));
     }
-
-    //printf( "%d\n",  dlist_isEmpty( &(uthread_internal_pRunningThread->joined_thread) ));
 
 	// Are we trying to exit from the main thread?
 	if (uthread_internal_pRunningThread->function != NULL) {
@@ -533,12 +532,22 @@ void uthread_monitor_exit( uthread_monitor_t * monitor ){
 }
 
 void uthread_monitor_wait( uthread_monitor_t * monitor ){
+    int recursioncounter = ~0;
 
     dlist_remove(&uthread_internal_readyQueue, &(uthread_internal_pRunningThread->node));
     dlist_enqueue( &(monitor->cv), &(uthread_internal_pRunningThread->node) );
 
-    if( monitor->lock.owner == uthread_internal_pRunningThread->tid ) uthread_mutex_unlock( &(monitor->lock) );
+    if( monitor->lock.owner == uthread_internal_pRunningThread->tid ){
+        recursioncounter = monitor->lock.count;
+        monitor->lock.count = 1;
+        uthread_mutex_unlock( &(monitor->lock) );
+    }
+
     uthread_internal_schedule();
+
+    //quando a thread entrar no escalonamento, o EIP vai estar a apontar para esta linha.
+    //Neste momento deve restaurar o valor da reentrância
+    if( recursioncounter != ~0 ) monitor->lock.count = recursioncounter;
 }
 
 void uthread_monitor_pulse( uthread_monitor_t * monitor ){
