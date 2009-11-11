@@ -546,6 +546,10 @@ void uthread_monitor_wait( uthread_monitor_t * monitor ){
     uthread_internal_schedule();
 
     //quando a thread entrar no escalonamento, o EIP vai estar a apontar para esta linha.
+    
+    //concorre com os demais para obter o lock.
+    if( monitor->lock.owner != 0 ) uthread_monitor_enter( monitor );
+
     //Neste momento deve restaurar o valor da reentrância
     if( recursioncounter != ~0 ) monitor->lock.count = recursioncounter;
 }
