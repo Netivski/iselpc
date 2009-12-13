@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tester", "FutureHolder_Tester\Tester.csproj", "{4B002E79-09CB-47B7-9BB3-32E259595D8D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tools", "Tools\Tools.csproj", "{D22758AE-5F8E-4EFD-AC3C-B2F4FC829293}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4B002E79-09CB-47B7-9BB3-32E259595D8D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4B002E79-09CB-47B7-9BB3-32E259595D8D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4B002E79-09CB-47B7-9BB3-32E259595D8D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4B002E79-09CB-47B7-9BB3-32E259595D8D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D22758AE-5F8E-4EFD-AC3C-B2F4FC829293}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D22758AE-5F8E-4EFD-AC3C-B2F4FC829293}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D22758AE-5F8E-4EFD-AC3C-B2F4FC829293}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D22758AE-5F8E-4EFD-AC3C-B2F4FC829293}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
