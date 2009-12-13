@@ -38,26 +38,24 @@ namespace Tools
             {                
                 if (_val.HasValue)
                     return _val.Value;
-                while (true)
+         
+                try
                 {
-                    try
+                    Monitor.Wait(_mon, timeout);
+                    return _val.Value;
+                }
+                catch (ThreadInterruptedException ex)
+                {
+                    if (_val.HasValue)
                     {
-                        Monitor.Wait(_mon, timeout);
+                        Thread.CurrentThread.Interrupt();
                         return _val.Value;
                     }
-                    catch (ThreadInterruptedException ex)
+                    else
                     {
-                        if (_val.HasValue)
-                        {
-                            Thread.CurrentThread.Interrupt();
-                            return _val.Value;
-                        }
-                        else
-                        {
-                            throw ex;
-                        }
+                        throw ex;
                     }
-                }
+                }         
             }
         }        
         public void Set(TVal val)
