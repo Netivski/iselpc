@@ -9,7 +9,7 @@ namespace Tools
 
         public CacheRecord()
         {
-            lat = DateTime.UtcNow.Ticks;
+            lat = DateTimeHelper.CurrentTicks;
             fh  = new FutureHolder<T>();            
         }
         
@@ -20,12 +20,12 @@ namespace Tools
 
         public T Get()
         {
-            lat = DateTime.UtcNow.Ticks;
+            lat = DateTimeHelper.CurrentTicks;
             return fh.Get();
         }
         public void Set(T val)
         {
-            lat = DateTime.UtcNow.Ticks;
+            lat = DateTimeHelper.CurrentTicks;
             fh.Set(val);
         }
     }

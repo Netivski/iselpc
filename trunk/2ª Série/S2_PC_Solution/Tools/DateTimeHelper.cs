@@ -6,6 +6,6 @@ namespace Tools
     {
         DateTimeHelper() { }
 
-        public static long GetCurrentTicks() { return DateTime.UtcNow.Ticks; }
+        public static long CurrentTicks { get { return DateTime.UtcNow.Ticks; } }
     }
 }
