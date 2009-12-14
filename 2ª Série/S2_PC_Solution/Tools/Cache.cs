@@ -14,8 +14,8 @@ namespace Tools
         SortedList<K, CacheRecord<V>> cls; // cls == Cache Local Store, Thread Safety
         SlaveMethod sm;                    //  sm == Slave Method
         long        rlt;                   // rlt == Record Life Time
-        Object monitor;        
-        Timer daemon;
+        Object      monitor;        
+        Timer       daemon;
 
         public Cache(SlaveMethod sMethod, long recordLifeTimeMilliseconds)
         {                        
