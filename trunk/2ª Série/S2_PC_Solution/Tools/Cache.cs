@@ -8,23 +8,23 @@ using System.Text;
 namespace Tools
 {       
     public class Cache<K, V>
-    {
-        const int RECORD_LIFETIME = 500;
-        
+    {       
         public delegate V SlaveMethod(K key);
 
         SortedList<K, CacheRecord<V>> cls; // cls == Cache Local Store, Thread Safety
         SlaveMethod sm;                    //  sm == Slave Method
+        long        rlt;                   // rlt == Record Life Time
         Object monitor;        
         Timer daemon;
 
-        public Cache( SlaveMethod sMethod )
-        {            
+        public Cache(SlaveMethod sMethod, long recordLifeTimeMilliseconds)
+        {                        
             cls     = new SortedList<K, CacheRecord<V>>();
             sm      = sMethod;            
+            rlt     = recordLifeTimeMilliseconds;
             monitor = new Object();
 
-            daemon = new Timer(PurgeCache, null, 0, RECORD_LIFETIME);
+            daemon = new Timer(PurgeCache, null, 0, rlt);
         }
         public V Get(K key)
         {
@@ -36,19 +36,15 @@ namespace Tools
             catch (KeyNotFoundException)
             {
                 retRecord = new CacheRecord<V>();
-                lock (monitor)
+                try
                 {
-                    try
-                    {
-                        //Entre a Exception e a entrada aqui, abriu-se a janela!!!
-                        //Alguém já pode ter inserido a mesma chave
-                        cls.Add(key, retRecord);
-                        retRecord.Set(sm(key));                        
-                    }
-                    catch (ArgumentException)
-                    {
-                        retRecord = cls[key];
-                    }
+                    //Entre a Exception e a entrada aqui, abriu-se a janela!!! Alguém já pode ter inserido a mesma chave
+                    cls.Add(key, retRecord);
+                    retRecord.Set(sm(key));
+                }
+                catch (ArgumentException)
+                {
+                    retRecord = cls[key];
                 }
 
                 return retRecord.Get();
@@ -59,9 +55,9 @@ namespace Tools
         {
             lock (monitor)
             {
-                long rlt = DateTimeHelper.CurrentTicks + RECORD_LIFETIME; //rlt == Record Life Time
+                long lt = DateTimeHelper.CurrentTicks + rlt; //lt == Life Time
 
-                cls.Where(p => p.Value.LastAccessTime < rlt).Select(p => cls.Remove(p.Key));
+                cls.Where(p => p.Value.LastAccessTime < lt).Select(p => cls.Remove(p.Key));
             }            
         }
     }
