@@ -1,85 +1,70 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Text;
 
 namespace Tools
-{
-    public delegate TVal _func<TVal, TKey>(TKey key);    
-    
-    public class Cache<TKey, TVal>
+{       
+    public class Cache<K, V>
     {
-        private Dictionary<TKey, CacheRecord<TVal>> _cacheTable;
-        private TimeSpan _refreshTime;
-        private _func<TVal, TKey> _keyFunction;
-        private Object _mon;
-        private Timer _timer;
-        private int _cleanCounter; //just to debug
+        const int RECORD_LIFETIME = 500;
         
-        public Cache(_func<TVal, TKey> func, int refreshTime)
-        {
-            _keyFunction = func;
-            //_refreshTime = new TimeSpan(0, refreshTime, 0);
-            _refreshTime = new TimeSpan(0, 0, refreshTime);//just to debug
-            _cacheTable = new Dictionary<TKey, CacheRecord<TVal>>();
-            _mon = new Object();            
-            _timer = new Timer(RefreshCache, null, 0, (int)_refreshTime.TotalMilliseconds);
-            _cleanCounter = 0; //just to debug
+        public delegate V SlaveMethod(K key);
+
+        SortedList<K, CacheRecord<V>> cls; // cls == Cache Local Store, Thread Safety
+        SlaveMethod sm;                    //  sm == Slave Method
+        Object monitor;        
+        Timer daemon;
+
+        public Cache( SlaveMethod sMethod )
+        {            
+            cls     = new SortedList<K, CacheRecord<V>>();
+            sm      = sMethod;            
+            monitor = new Object();
+
+            daemon = new Timer(PurgeCache, null, 0, RECORD_LIFETIME);
         }
-        public TVal Get(TKey key)
+        public V Get(K key)
         {
-            CacheRecord<TVal> retRecord;
+            CacheRecord<V> retRecord;
             try
             {
-                lock (_mon)
+                lock (monitor)
                 {
-                    retRecord = _cacheTable[key];                 
+                    retRecord = cls[key];                 
                 }
                 return retRecord.Get();
             }
             catch (KeyNotFoundException)
             {
-                retRecord = new CacheRecord<TVal>();
-                lock (_mon)
+                retRecord = new CacheRecord<V>();
+                lock (monitor)
                 {
                     try
                     {
                         //Entre a Exception e a entrada aqui, abriu-se a janela!!!
                         //Alguém já pode ter inserido a mesma chave
-                        _cacheTable.Add(key, retRecord);
+                        cls.Add(key, retRecord);
                     }
                     catch (ArgumentException)
                     {
-                        retRecord = _cacheTable[key];
+                        retRecord = cls[key];
                     }
                 }
-                retRecord.Set(_keyFunction(key));
+                retRecord.Set(sm(key));
                 return retRecord.Get();
             }
         }
-        private void RefreshCache(Object o)
+
+        void PurgeCache(Object o)
         {
-            lock (_mon)
+            lock (monitor)
             {
-                Console.WriteLine("A iniciar a limpeza N " + ++_cleanCounter);
-                try
-                {
-                    ICollection keys = _cacheTable.Keys;
-                    IEnumerator keysEnumerator = keys.GetEnumerator();
-                    while (keysEnumerator.MoveNext())
-                    {
-                        if (_cacheTable[(TKey)keysEnumerator.Current].LastAccessTime < DateTime.Now.Subtract(_refreshTime))
-                        {
-                            _cacheTable.Remove((TKey)keysEnumerator.Current);
-                        }
-                    }
-                    Console.WriteLine("Limpeza N " + _cleanCounter + " efectuada sem interrupções");
-                }
-                catch (InvalidOperationException)
-                {
-                    Console.WriteLine("Limpeza N " + _cleanCounter + " interrompida");
-                }
+                long rlt = DateTime.UtcNow.Ticks + RECORD_LIFETIME; //rlt == Record Life Time
+
+                cls.Where(p => p.Value.LastAccessTime < rlt).Select(p => cls.Remove(p.Key));
             }            
         }
     }
