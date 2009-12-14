@@ -31,11 +31,7 @@ namespace Tools
             CacheRecord<V> retRecord;
             try
             {
-                lock (monitor)
-                {
-                    retRecord = cls[key];                 
-                }
-                return retRecord.Get();
+                return cls[key].Get(); // Thread Safety
             }
             catch (KeyNotFoundException)
             {
@@ -47,13 +43,14 @@ namespace Tools
                         //Entre a Exception e a entrada aqui, abriu-se a janela!!!
                         //Alguém já pode ter inserido a mesma chave
                         cls.Add(key, retRecord);
+                        retRecord.Set(sm(key));                        
                     }
                     catch (ArgumentException)
                     {
                         retRecord = cls[key];
                     }
                 }
-                retRecord.Set(sm(key));
+
                 return retRecord.Get();
             }
         }
@@ -62,7 +59,7 @@ namespace Tools
         {
             lock (monitor)
             {
-                long rlt = DateTime.UtcNow.Ticks + RECORD_LIFETIME; //rlt == Record Life Time
+                long rlt = DateTimeHelper.CurrentTicks + RECORD_LIFETIME; //rlt == Record Life Time
 
                 cls.Where(p => p.Value.LastAccessTime < rlt).Select(p => cls.Remove(p.Key));
             }            
