@@ -11,18 +11,19 @@ namespace Tools
     public class Cache<TKey, TVal>
     {
         private Dictionary<TKey, CacheRecord<TVal>> _cacheTable;
-        private long _refreshTime;
+        private TimeSpan _refreshTime;
         private _func<TVal, TKey> _keyFunction;
         private Object _mon;
         private Timer _timer;
         
-        public Cache(_func<TVal, TKey> func, long refreshTime)
+        public Cache(_func<TVal, TKey> func, int refreshTime)
         {
             _keyFunction = func;
-            _refreshTime = refreshTime;
+            _refreshTime = new TimeSpan(0, refreshTime, 0);
             _cacheTable = new Dictionary<TKey, CacheRecord<TVal>>();
             _mon = new Object();            
-            _timer = new Timer(RefreshCache, null, 0, refreshTime);
+            _timer = new Timer(RefreshCache, null, 0, (int)_refreshTime.TotalMilliseconds);
+            
         }
         public TVal Get(TKey key)
         {
@@ -48,7 +49,24 @@ namespace Tools
         }
         private void RefreshCache(Object o)
         {
-            
+            lock (_mon)
+            {
+                try
+                {
+                    ICollection keys = _cacheTable.Keys;
+                    IEnumerator keysEnumerator = keys.GetEnumerator();
+                    while (keysEnumerator.MoveNext())
+                    {
+                        if (_cacheTable[(TKey)keysEnumerator.Current].LastAccessTime < DateTime.Now.Subtract(_refreshTime))
+                        {
+                            _cacheTable.Remove((TKey)keysEnumerator.Current);
+                        }
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
         }
     }
 }
