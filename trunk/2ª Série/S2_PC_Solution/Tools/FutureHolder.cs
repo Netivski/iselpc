@@ -6,8 +6,8 @@ namespace Tools
 {
     struct NullableType<T>
     {
-        private T value;
-        private bool hasValue;
+        T value;
+        bool hasValue;
 
         public T Value
         {
@@ -19,37 +19,40 @@ namespace Tools
             get { return hasValue; }
         }
     }
-    public class FutureHolder<TVal>
+
+    public class FutureHolder<T>
     {
-        private NullableType<TVal> _val;
-        private Object _mon;
+        NullableType<T> nVal;
+        Object          monitor;
 
         public FutureHolder()
         {            
-            _mon = new Object();            
+            monitor = new Object();            
         }
-        public TVal Get()
+
+        public T Get()
         {
             return Get(Timeout.Infinite);
         }
-        public TVal Get(int timeout)
+        
+        public T Get(int timeout)
         {
-            lock (_mon)
+            lock (monitor)
             {                
-                if (_val.HasValue)
-                    return _val.Value;
+                if (nVal.HasValue)
+                    return nVal.Value;
          
                 try
                 {
-                    Monitor.Wait(_mon, timeout);
-                    return _val.Value;
+                    Monitor.Wait(monitor, timeout);
+                    return nVal.Value;
                 }
                 catch (ThreadInterruptedException ex)
                 {
-                    if (_val.HasValue)
+                    if (nVal.HasValue)
                     {
                         Thread.CurrentThread.Interrupt();
-                        return _val.Value;
+                        return nVal.Value;
                     }
                     else
                     {
@@ -58,12 +61,13 @@ namespace Tools
                 }         
             }
         }        
-        public void Set(TVal val)
+        
+        public void Set(T val)
         {
-            lock (_mon)
+            lock (monitor)
             {
-                _val.Value = val;
-                Monitor.PulseAll(_mon);
+                nVal.Value = val;
+                Monitor.PulseAll(monitor);
             }
         }
     }

@@ -1,35 +1,32 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
 namespace Tools
 {
-    public class CacheRecord<TVal>
+    internal class CacheRecord<T>
     {
-        private DateTime _lastAccessTime;
-        private FutureHolder<TVal> _val;
+        long            lat; //lat == Last Access Time
+        FutureHolder<T> fh;  //fh  == Future Holder
 
         public CacheRecord()
         {
-            _val = new FutureHolder<TVal>();
-            _lastAccessTime = DateTime.Now;
+            lat = DateTime.UtcNow.Ticks;
+            fh  = new FutureHolder<T>();            
         }
-        public DateTime LastAccessTime
+        
+        public long LastAccessTime
         {
-            get
-            {
-                return _lastAccessTime;
-            }
+            get { return lat; }
         }
-        public TVal Get()
+
+        public T Get()
         {
-            _lastAccessTime = DateTime.Now;
-            return _val.Get();
+            lat = DateTime.UtcNow.Ticks;
+            return fh.Get();
         }
-        public void Set(TVal val)
+        public void Set(T val)
         {
-            _val.Set(val);
+            lat = DateTime.UtcNow.Ticks;
+            fh.Set(val);
         }
     }
 }

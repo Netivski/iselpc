@@ -9,7 +9,7 @@ namespace Tester
     class Cache_tester
     {
         private const Int32 N_THREADS = 10;
-        static Cache<Int32, String> cache = new Cache<Int32, String>(keyFunction, 5);
+        static Cache<Int32, String> cache = new Cache<Int32, String>(keyFunction);
 
         public static void Run()
         {           
