@@ -52,28 +52,96 @@ namespace Tools
         //    }
         //}
 
-        public V Get(K key)
-        {//Sugestão
-            CacheRecord<V> retRecord = null;
+        //public V Get(K key)
+        //{//Sugestão
+        //    CacheRecord<V> retRecord = null;
+        //    lock (monitor)
+        //    {
+        //        try
+        //        {
+        //            retRecord = cls[key];
+        //        }
+        //        catch (KeyNotFoundException)
+        //        {
+        //            cls[key] = retRecord; // atenção que cls[key] é sempre null. A referencia é copiada por valor. no caso 0 ( NULL ) 
+        //        }
+        //    }
+        //    if (retRecord == null)
+        //    {
+        //        retRecord = new CacheRecord<V>();
+        //        retRecord.Set(sm(key));
+        //    }
+
+        //    return retRecord.Get();
+        //}
+
+        public V Get(K key) // sugestão 001
+        {
+            CacheRecord<V> record = null;
+            bool setValue         = false;
+
             lock (monitor)
             {
                 try
                 {
-                    retRecord = cls[key];
+                    record = cls[key];
                 }
                 catch (KeyNotFoundException)
                 {
-                    cls[key] = retRecord;
+                    record    = new CacheRecord<V>();
+                    setValue  = true;
+                    cls.Add(key, record );                    
                 }
             }
-            if (retRecord == null)
+
+            if (setValue)
             {
-                retRecord = new CacheRecord<V>();
-                retRecord.Set(sm(key));
+                record.Set(sm(key));
             }
 
-            return retRecord.Get();
+            return record.Get();
         }
+
+        public V GetII(K key) 
+        {
+            // sugestão 002 
+            //              Com esta implementação tenta-se fugir ao estrangulamento na leitura da cls
+            //              Utilização do lock para escrita.
+
+            CacheRecord<V> record = null;
+            bool setValue         = false;
+
+            try 
+            {
+                record = cls[key];
+            }
+            catch (KeyNotFoundException)
+            {
+                try
+                {
+                    lock (monitor)
+                    {
+                        record = new CacheRecord<V>();
+                        setValue = true;
+                        cls.Add(key, record);
+                    }
+                }
+                catch (ArgumentException) //An element with the same key already exists
+                {
+                    setValue = false;
+                    record = cls[key];
+                }
+            }
+
+
+            if (setValue)
+            {
+                record.Set(sm(key));
+            }
+
+            return record.Get();
+        }
+
 
         //Extension Methods - C#3.5
         //void PurgeCache(Object o)
