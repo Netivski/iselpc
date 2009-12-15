@@ -10,7 +10,7 @@ namespace Tools
 
         public PhasedGate( int max )
         {
-            if (max < 0) throw new ArgumentOutOfRangeException();
+            if (max < 1) throw new ArgumentOutOfRangeException();
 
             cdLatch = max;
             monitor = new object();
