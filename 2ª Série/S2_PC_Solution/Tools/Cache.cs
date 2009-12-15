@@ -153,21 +153,39 @@ namespace Tools
         //    }            
         //}
         
+        //void PurgeCache(Object o)
+        //{
+        //    lock (monitor)
+        //    {
+        //        long lt = DateTimeHelper.CurrentTicks - rlt; //lt == Life Time
+        //        try
+        //        {
+        //            foreach (KeyValuePair<K, CacheRecord<V>> keyPair in cls)
+        //            {
+        //                if (keyPair.Value != null && keyPair.Value.LastAccessTime < lt)
+        //                    cls.Remove(keyPair.Key);
+        //            }
+        //        }
+        //        finally { }
+        //    }
+        //}
+
         void PurgeCache(Object o)
         {
             lock (monitor)
             {
                 long lt = DateTimeHelper.CurrentTicks - rlt; //lt == Life Time
-                try
+
+                LinkedList<K> keys = new LinkedList<K>();
+                foreach (KeyValuePair<K, CacheRecord<V>> keyPair in cls) if (keyPair.Value != null && keyPair.Value.LastAccessTime < lt) keys.AddLast(keyPair.Key);
+                
+                LinkedList<K>.Enumerator keysEnum = keys.GetEnumerator();
+                while (keysEnum.MoveNext())
                 {
-                    foreach (KeyValuePair<K, CacheRecord<V>> keyPair in cls)
-                    {
-                        if (keyPair.Value != null && keyPair.Value.LastAccessTime < lt)
-                            cls.Remove(keyPair.Key);
-                    }
+                    cls.Remove(keysEnum.Current);
                 }
-                finally { }
             }
         }
+
     }
 }
