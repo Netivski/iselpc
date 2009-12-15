@@ -48,6 +48,7 @@
     <Compile Include="CacheRecord.cs" />
     <Compile Include="DateTimeHelper.cs" />
     <Compile Include="FutureHolder.cs" />
+    <Compile Include="NullableType.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
