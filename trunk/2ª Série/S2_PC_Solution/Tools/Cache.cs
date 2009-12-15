@@ -34,25 +34,25 @@ namespace Tools
             CacheRecord<V> record = null;
             bool setValue         = false;
 
-            try 
-            {
-                record = cls[key];
-            }
-            catch (KeyNotFoundException)
+            lock (monitor)
             {
                 try
                 {
-                    lock (monitor)
+                    record = cls[key];
+                }
+                catch (KeyNotFoundException)
+                {
+                    try
                     {
-                        record = new CacheRecord<V>();
+                        record   = new CacheRecord<V>();
                         setValue = true;
                         cls.Add(key, record);
                     }
-                }
-                catch (ArgumentException) //An element with the same key already exists
-                {
-                    setValue = false;
-                    record = cls[key];
+                    catch (ArgumentException) //An element with the same key already exists
+                    {
+                        setValue = false;
+                        record = cls[key];
+                    }
                 }
             }
 
