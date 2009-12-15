@@ -12,10 +12,12 @@ public class DocumentDB
 	 */
 	private static class Embrulho{
 		public volatile Document item;
+	
 		Embrulho(Document doc)
 		{
 			setDoc(doc);
 		}
+		
 		public Document getDoc(){
 			return item;
 		}
@@ -24,6 +26,7 @@ public class DocumentDB
 			item = doc;
 		}
 	}
+	
 	private static class Document 
 	{
 		/** The document's version number. */
