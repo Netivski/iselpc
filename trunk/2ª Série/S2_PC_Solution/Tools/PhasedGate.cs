@@ -5,7 +5,7 @@ namespace Tools
 {
     public class PhasedGate
     {
-        int    cdLatch; // cdLatch == Count Down Latch
+        volatile int cdLatch; // cdLatch == Count Down Latch
         object monitor;
 
         public PhasedGate( int max )
@@ -23,7 +23,7 @@ namespace Tools
                 #region - Nota
                 // Não há necessidade de recorrer à class Interlocked.Decrement
                 // uma vez que a thread está em posse do monitor.
-                // Será que há problemas de visibilidade ?? 
+                // Será que há problemas de visibilidade ?? ( com o modificador volatile não ) 
                 #endregion
 
                 if (cdLatch > 0)
