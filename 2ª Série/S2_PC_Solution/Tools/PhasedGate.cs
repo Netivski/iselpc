@@ -41,7 +41,6 @@ namespace Tools
                 }
                 else Monitor.PulseAll(monitor);
             }
-
         }
 
         public void Wait(int millisecondsTimeout)
