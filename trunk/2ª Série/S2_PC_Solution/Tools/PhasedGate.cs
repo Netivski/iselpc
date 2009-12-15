@@ -16,13 +16,14 @@ namespace Tools
             monitor = new object();
         }
 
-        protected void DoWork(int millisecondsTimeout, bool blocking)
+        protected virtual void DoWork(int millisecondsTimeout, bool blocking)
         {
             lock (monitor)
             {
                 #region - Nota
                 // Não há necessidade de recorrer à class Interlocked.Decrement
                 // uma vez que a thread está em posse do monitor.
+                // Será que há problemas de visibilidade ?? 
                 #endregion
 
                 if (cdLatch > 0)
