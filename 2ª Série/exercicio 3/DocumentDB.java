@@ -34,8 +34,7 @@ public class DocumentDB
                 public int get_Version(){ return _version.get(); }
                 public int get_VersionIncrementAndGet(){ return _version.incrementAndGet(); }
                 
-                public String get_Text(){ return _text; }
-                
+                public String get_Text(){ return _text; }                
 	}
 	
 	
@@ -65,6 +64,7 @@ public class DocumentDB
         {
             int versionId = _store[id].get_VersionIncrementAndGet();
             Embrulho<Document> emp = new Embrulho<Document>(new Document(versionId, newText));            		
+            _store[id] = emp.getDoc();            
 	}
         
         public static void main( String[] args ){
