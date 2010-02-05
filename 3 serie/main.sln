@@ -1,0 +1,32 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SingleThreadServer", "SingleThreadServer\SingleThreadServer.csproj", "{52FFB667-C0F1-43DE-9FDA-54E1746E97EA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SingleThreadClient", "SingleThreadClient\SingleThreadClient.csproj", "{80F0214A-39CF-400D-8543-1245BE7AD7B6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiThreadServer", "MultiThreadServer\MultiThreadServer.csproj", "{AF87D5AB-5F1C-4DA3-9A9F-6F1DEA36760E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{52FFB667-C0F1-43DE-9FDA-54E1746E97EA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{52FFB667-C0F1-43DE-9FDA-54E1746E97EA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{52FFB667-C0F1-43DE-9FDA-54E1746E97EA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{52FFB667-C0F1-43DE-9FDA-54E1746E97EA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{80F0214A-39CF-400D-8543-1245BE7AD7B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80F0214A-39CF-400D-8543-1245BE7AD7B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80F0214A-39CF-400D-8543-1245BE7AD7B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80F0214A-39CF-400D-8543-1245BE7AD7B6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF87D5AB-5F1C-4DA3-9A9F-6F1DEA36760E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF87D5AB-5F1C-4DA3-9A9F-6F1DEA36760E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF87D5AB-5F1C-4DA3-9A9F-6F1DEA36760E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF87D5AB-5F1C-4DA3-9A9F-6F1DEA36760E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
