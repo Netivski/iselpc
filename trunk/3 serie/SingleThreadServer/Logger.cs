@@ -10,6 +10,7 @@
  */
 
 using System;
+using System.Collections.Generic;// 
 using System.IO;
 
 namespace Tracker
@@ -24,12 +25,14 @@ namespace Tracker
 	// Logger single-threaded.
 	public class Logger
 	{
+        const int BUFFER_SIZE = 512;
+
 		private readonly TextWriter writer;
 		private DateTime start_time;
 		private int num_requests;
         private volatile LoggerStatus status = LoggerStatus.Stoped; //
-        private object writeMon; //
         private object startMon; //
+        private LinkedList<string> buffer; // 
 
 		public Logger() : this(Console.Out) {}
 		public Logger(string logfile) : this(new StreamWriter(new FileStream(logfile, FileMode.Append, FileAccess.Write))) {}
@@ -38,8 +41,8 @@ namespace Tracker
 		    num_requests = 0;
 		    writer = awriter;
 
-            writeMon = new object(); //
             startMon = new object(); //
+            buffer   = new LinkedList<string>(); //
 		}
 
         void StartThread()
@@ -77,6 +80,16 @@ namespace Tracker
 		public void LogMessage(string msg)
 		{			
             // Escreve no buffer e pulsa o writer //
+
+            lock( buffer ){
+                if (buffer.Count < BUFFER_SIZE)
+                {
+                    buffer.AddLast(msg);
+                    return; 
+                }
+
+                // verificar se é necessario um monitor para o writers e outro para o reader
+            }
 		}
 
         void WriteMessage(string msg) // 
