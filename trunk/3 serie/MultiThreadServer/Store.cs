@@ -71,20 +71,26 @@ namespace Tracker
         /// <param name="client">The file's location.</param>
         public void Register(string fileName, IPEndPoint client)
         {
-            HashSet<IPEndPoint> fileHosts = null;
-            if (!_store.ContainsKey(fileName))
-                ////_store[fileName] = (fileHosts = new HashSet<IPEndPoint>());
-                lock (_store) // 
-                {
-                    _store[fileName] = (fileHosts = new HashSet<IPEndPoint>()); //
-                }                
-            else
-                fileHosts = _store[fileName];
+            // RN - Deixa de ser necessário
+            //HashSet<IPEndPoint> fileHosts = null;
 
-            lock (_store[fileName])
+            lock (_store) // RN - Alterado para ganhar lock antes de read
             {
-                fileHosts.Add(client);
+                if (!_store.ContainsKey(fileName))
+                    ////_store[fileName] = (fileHosts = new HashSet<IPEndPoint>());
+                    //_store[fileName] = (fileHosts = new HashSet<IPEndPoint>()); //
+                    _store[fileName] = new HashSet<IPEndPoint> { client }; // RN
+                else
+                    //fileHosts = _store[fileName];
+                    _store[fileName].Add(client); // RN
             }
+
+            // RN - Para ter lock o mínimo de tempo e porque pode acontecer
+            //      o mundo entre os blocos de lock é feita a afectação no if
+            //lock (_store[fileName])
+            //{
+            //    fileHosts.Add(client);
+            //}
         }
 
         /// <summary>
@@ -95,26 +101,35 @@ namespace Tracker
         /// <returns>A boolean value indicating if the file's location as been unregistered successfully.</returns>
         public bool Unregister(string fileName, IPEndPoint client)
         {
+            bool result;
             // Is file being tracked?
-            if (!_store.ContainsKey(fileName))
-                return false;
 
-            // File locations are being tracked. Unregister client location.
-            HashSet<IPEndPoint> locations = _store[fileName];
-            ////bool result = locations.Remove(client);
-            bool result = false; //
-            lock (_store[fileName]) //
+            lock (_store) // RN - Adquire o lock antes de read
             {
-                result = locations.Remove(client); // 
-            }
+                if (!_store.ContainsKey(fileName))
+                    return false;
 
-            if (result && locations.Count == 0)
-                // Last client hosting the tracked file. Remove it from the store.
-                //_store.Remove(fileName);
-                lock (_store) //
-                {
-                    _store.Remove(fileName); // 
-                }
+                // File locations are being tracked. Unregister client location.
+                HashSet<IPEndPoint> locations = _store[fileName];
+                result = locations.Remove(client); // RN - Manteve-se por estar com o lock
+                //bool result = false; //
+
+                // RN - Comentado porque na mudança de lock pode acontecer o mundo
+                //lock (_store[fileName]) //
+                //{
+                //    result = locations.Remove(client); // 
+                //}
+
+                if (result && locations.Count == 0)
+                    // Last client hosting the tracked file. Remove it from the store.
+                    _store.Remove(fileName);
+
+                // RN - Comentado porque na mudança de lock pode acontecer o mundo
+                //lock (_store) //
+                //{
+                //    _store.Remove(fileName); // 
+                //}
+            }
 
             return result;
         }
@@ -145,12 +160,12 @@ namespace Tracker
         public IPEndPoint[] GetFileLocations(string fileName)
         {
             IPEndPoint[] locations = noLocations;
-            if (_store.ContainsKey(fileName))
-                ////locations = _store[fileName].ToArray();
-                lock (_store[fileName]) // 
-                {
+            lock (_store[fileName]) // RN - Adquire o lock antes do read
+            {
+                if (_store.ContainsKey(fileName))
+                    ////locations = _store[fileName].ToArray();
                     locations = _store[fileName].ToArray(); // 
-                }
+            }
             return locations;
         }
 

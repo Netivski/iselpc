@@ -8,7 +8,7 @@ namespace TestClient
 {
     class Program
     {
-        private const int PORT = 8888;
+        private const int PORT = 2345;
 
         private static void Register(IEnumerable<string> files, string adress, ushort port)
         {
