@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Diagnostics; //
 
 namespace Tracker
 {
@@ -58,7 +59,7 @@ namespace Tracker
                 }
                 IPAddress ipAddress = IPAddress.Parse(triple[1]);
                 ushort port;
-                if(!ushort.TryParse(triple[2], out port))
+                if (!ushort.TryParse(triple[2], out port))
                 {
                     log.LogMessage("Handler - Invalid REGISTER message.");
                     return;
@@ -166,6 +167,12 @@ namespace Tracker
         private readonly Logger log;
 
         /// <summary>
+        /// The Timout value which Handler waits for a request.
+        /// By default is 5s.
+        /// </summary>
+        private readonly long timeout = 5000;
+
+        /// <summary>
         ///	Initiates an instance with the given parameters.
         /// </summary>
         /// <param name="connection">The TCP connection to be used.</param>
@@ -178,6 +185,17 @@ namespace Tracker
         }
 
         /// <summary>
+        ///	Initiates an instance with the given parameters.
+        /// </summary>
+        /// <param name="timeout">The timeout value to be used.</param>
+        public Handler(Stream connection, Logger log, long timeout)
+            : this(connection, log)
+        {
+            this.timeout = timeout;
+        }
+
+
+        /// <summary>
         /// Performs request servicing.
         /// </summary>
         public void Run()
@@ -185,21 +203,28 @@ namespace Tracker
             try
             {
                 string requestType;
+
                 // Read request type (the request's first line)
                 ////while ((requestType = input.ReadLine()) != null && requestType != string.Empty)
-                while (  !string.IsNullOrEmpty( (requestType = input.ReadLine())) ) //simplificação
+                //while (!string.IsNullOrEmpty((requestType = input.ReadLine()))) //simplificação
+                try
                 {
-                    requestType = requestType.ToUpper();
-                    if (!MESSAGE_HANDLERS.ContainsKey(requestType))
+                    while (!string.IsNullOrEmpty((requestType = input.ReadLine()))) //simplificação
                     {
-                        log.LogMessage("Handler - Unknown message type. Servicing ending.");
-                        return;
-                    }
-                    // Dispatch request processing
-                    MESSAGE_HANDLERS[requestType](input, output, log);
+                        requestType = requestType.ToUpper();
+                        if (!MESSAGE_HANDLERS.ContainsKey(requestType))
+                        {
+                            log.LogMessage("Handler - Unknown message type. Servicing ending.");
+                            return;
+                        }
+                        // Dispatch request processing
+                        MESSAGE_HANDLERS[requestType](input, output, log);
 
-                    Program.ShowInfo(Store.Instance); //
+                        Program.ShowInfo(Store.Instance); //
+                    }
                 }
+                catch (IOException ioe) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
+                catch (SocketException se) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
             }
             catch (IOException ioe)
             {
@@ -241,7 +266,7 @@ namespace Tracker
                 srv = new TcpListener(IPAddress.Loopback, portNumber);
                 srv.Start();
                 while (true)
-                {                    
+                {
                     log.LogMessage("Listener - Waiting for connection requests.");
                     // \/\/\/\/\/\/Não faz sentido correr o cliclo de GC.\/\/\/\/\/\/\ //
                     ////using (TcpClient socket = srv.AcceptTcpClient()) 
@@ -249,6 +274,7 @@ namespace Tracker
 
                     TcpClient socket = srv.AcceptTcpClient(); ////
                     socket.LingerState = new LingerOption(true, 10);
+                    socket.ReceiveTimeout = 10;
                     log.LogMessage(String.Format("Listener - Connection established with {0}.", socket.Client.RemoteEndPoint));
                     // Instantiating protocol handler and associate it to the current TCP connection
                     ////Handler protocolHandler = new Handler(socket.GetStream(), log);
@@ -290,30 +316,30 @@ namespace Tracker
             Console.WriteLine();
         }
 
-/*
-        static void TestStore()
-        {
-            Store store = Store.Instance;
+        /*
+                static void TestStore()
+                {
+                    Store store = Store.Instance;
 
-            store.Register("xpto", new IPEndPoint(IPAddress.Parse("193.1.2.3"), 1111));
-            store.Register("xpto", new IPEndPoint(IPAddress.Parse("194.1.2.3"), 1111));
-            store.Register("xpto", new IPEndPoint(IPAddress.Parse("195.1.2.3"), 1111));
-            ShowInfo(store);
-            Console.ReadLine();
-            store.Register("ypto", new IPEndPoint(IPAddress.Parse("193.1.2.3"), 1111));
-            store.Register("ypto", new IPEndPoint(IPAddress.Parse("194.1.2.3"), 1111));
-            ShowInfo(store);
-            Console.ReadLine();
-            store.Unregister("xpto", new IPEndPoint(IPAddress.Parse("195.1.2.3"), 1111));
-            ShowInfo(store);
-            Console.ReadLine();
+                    store.Register("xpto", new IPEndPoint(IPAddress.Parse("193.1.2.3"), 1111));
+                    store.Register("xpto", new IPEndPoint(IPAddress.Parse("194.1.2.3"), 1111));
+                    store.Register("xpto", new IPEndPoint(IPAddress.Parse("195.1.2.3"), 1111));
+                    ShowInfo(store);
+                    Console.ReadLine();
+                    store.Register("ypto", new IPEndPoint(IPAddress.Parse("193.1.2.3"), 1111));
+                    store.Register("ypto", new IPEndPoint(IPAddress.Parse("194.1.2.3"), 1111));
+                    ShowInfo(store);
+                    Console.ReadLine();
+                    store.Unregister("xpto", new IPEndPoint(IPAddress.Parse("195.1.2.3"), 1111));
+                    ShowInfo(store);
+                    Console.ReadLine();
 
-            store.Unregister("xpto", new IPEndPoint(IPAddress.Parse("193.1.2.3"), 1111));
-            store.Unregister("xpto", new IPEndPoint(IPAddress.Parse("194.1.2.3"), 1111));
-            ShowInfo(store);
-            Console.ReadLine();
-        }
-*/
+                    store.Unregister("xpto", new IPEndPoint(IPAddress.Parse("193.1.2.3"), 1111));
+                    store.Unregister("xpto", new IPEndPoint(IPAddress.Parse("194.1.2.3"), 1111));
+                    ShowInfo(store);
+                    Console.ReadLine();
+                }
+        */
 
 
         /// <summary>
