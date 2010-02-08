@@ -219,12 +219,12 @@ namespace Tracker
                         }
                         // Dispatch request processing
                         MESSAGE_HANDLERS[requestType](input, output, log);
-
-                        Program.ShowInfo(Store.Instance); //
                     }
+
+                    Program.ShowInfo(Store.Instance); //
                 }
-                catch (IOException ioe) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
-                catch (SocketException se) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
+                catch (IOException) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
+                catch (SocketException) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
             }
             catch (IOException ioe)
             {
