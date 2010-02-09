@@ -14,10 +14,26 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Diagnostics; //
+using System.Diagnostics;
+using System.Text;
+using System.Threading; //
 
 namespace Tracker
 {
+
+    public sealed class StateObject
+    {
+        // Network Stream.
+        public NetworkStream stream = null;
+        // Size of receive buffer.
+        public const int BufferSize = 256;
+        // Receive buffer.
+        public byte[] buffer = new byte[BufferSize];
+        // Received data string.
+        public StringBuilder sb = new StringBuilder();
+    }
+
+
     /// <summary>
     /// Handles client requests.
     /// </summary>
@@ -148,6 +164,7 @@ namespace Tracker
             output.WriteLine();
             output.Flush();
         }
+
         #endregion
 
 
@@ -162,6 +179,11 @@ namespace Tracker
         private readonly StreamWriter output;
 
         /// <summary>
+        /// The connection stream (I/O)
+        /// </summary>
+        private readonly NetworkStream connStream;
+
+        /// <summary>
         /// The Logger instance to be used.
         /// </summary>
         private readonly Logger log;
@@ -173,13 +195,19 @@ namespace Tracker
         private readonly long timeout = 5000;
 
         /// <summary>
+        /// 
+        /// </summary>
+        private volatile StateObject state;
+
+        /// <summary>
         ///	Initiates an instance with the given parameters.
         /// </summary>
         /// <param name="connection">The TCP connection to be used.</param>
         /// <param name="log">the Logger instance to be used.</param>
-        public Handler(Stream connection, Logger log)
+        public Handler(NetworkStream connection, Logger log)
         {
             this.log = log;
+            connStream = connection;
             output = new StreamWriter(connection);
             input = new StreamReader(connection);
         }
@@ -188,30 +216,44 @@ namespace Tracker
         ///	Initiates an instance with the given parameters.
         /// </summary>
         /// <param name="timeout">The timeout value to be used.</param>
-        public Handler(Stream connection, Logger log, long timeout)
+        public Handler(NetworkStream connection, Logger log, long timeout)
             : this(connection, log)
         {
             this.timeout = timeout;
         }
 
-
         /// <summary>
-        /// Performs request servicing.
+        ///	The callback which is called on an asynchronous read from the socket.
         /// </summary>
-        public void Run()
+        /// <param name="ar">The IAsyncResult.</param>
+        void ReadDataCallback(IAsyncResult ar)
         {
+            StateObject _state = (StateObject)ar.AsyncState;
+            NetworkStream _stream = _state.stream;
             try
             {
-                string requestType;
-
-                // Read request type (the request's first line)
-                ////while ((requestType = input.ReadLine()) != null && requestType != string.Empty)
-                //while (!string.IsNullOrEmpty((requestType = input.ReadLine()))) //simplificação
-                try
+                int bytesRead = _stream.EndRead(ar);
+                if (bytesRead > 0)
                 {
-                    while (!string.IsNullOrEmpty((requestType = input.ReadLine()))) //simplificação
+                    _state.sb.Append(Encoding.ASCII.GetString(_state.buffer, 0, bytesRead));
+                    _stream.BeginRead(_state.buffer, 0, StateObject.BufferSize,
+                        new AsyncCallback(ReadDataCallback), _state);
+                    
+                    //Ao ler um line break sinaliza state sabendo que, no StringBuilder de state está o comando
+                    //O problema é quando é lido um bloco da stream (e.g. toda a mensagem)
+                    //Tem que ser feito parse ao stringbuilder de state para obter o comando.
+                    //É state que deve ter métodos GetCommand, GetParams?
+                    //Se sim, então ReadDataCallback só sinaliza state quando encontrar 2 line breaks
+                    //Os handlers de mensagens deixarão de receber um stream de input
+                    //Consequências: trabalho desnecessário quando o utilizador introduz um comando inválido.
+                }
+                else
+                {
+                    log.LogMessage("Handler - Aparently connection was lost!");
+                    if (_state.sb.Length > 1)
                     {
-                        requestType = requestType.ToUpper();
+                        string requestType;
+                        requestType = _state.sb.ToString().ToUpper();
                         if (!MESSAGE_HANDLERS.ContainsKey(requestType))
                         {
                             log.LogMessage("Handler - Unknown message type. Servicing ending.");
@@ -223,6 +265,33 @@ namespace Tracker
 
                     Program.ShowInfo(Store.Instance); //
                 }
+            }
+            catch (Exception e)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Performs request servicing.
+        /// </summary>
+        public void Run()
+        {
+            try
+            {
+                try
+                {
+                    state = new StateObject();
+                    lock(state)
+                    {
+                        state.stream = connStream;
+                        Stopwatch sw = new Stopwatch();
+                        IAsyncResult getCommand = connStream.BeginRead(state.buffer, 0, StateObject.BufferSize, new AsyncCallback(ReadDataCallback), state);
+                        sw.Start();
+                        Monitor.Wait(state); // RN - Está aqui para bloquear a thread (testes)
+                    }
+
+                }
+
                 catch (IOException) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
                 catch (SocketException) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
             }
@@ -274,7 +343,6 @@ namespace Tracker
 
                     TcpClient socket = srv.AcceptTcpClient(); ////
                     socket.LingerState = new LingerOption(true, 10);
-                    socket.ReceiveTimeout = 10;
                     log.LogMessage(String.Format("Listener - Connection established with {0}.", socket.Client.RemoteEndPoint));
                     // Instantiating protocol handler and associate it to the current TCP connection
                     ////Handler protocolHandler = new Handler(socket.GetStream(), log);
