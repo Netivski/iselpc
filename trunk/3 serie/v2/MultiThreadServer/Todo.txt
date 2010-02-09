@@ -1,0 +1,11 @@
+﻿Consenção
+  1 - o código iniciado por ////, foi código do prof. que eu comentei
+  2 - o código terminado por //, foi o que eu adicionei 
+  3 - Os comentário que adicionei começam por // e terminam por //
+
+1 - Verificar se os métodos da class LOG são Thread Safe
+2 - Verificar se as referencias da class Store é Thread Safe - Verificado - Construtor de tipo
+3 - Na class Store::GetTrackedFiles a propriedade _store.Keys é thread safe?      - Done, monitor
+4 - Na class Store::GetFileLocations o indexador _store[fileName] é thread safe?  - Done, monitor
+2 - O método Program.ShowInfo(Store.Instance); deve passar para o fim do processamento assíncrono
+
