@@ -13,19 +13,18 @@ namespace Tracker
     {
         public const int BufferSize = 256;
 
-        volatile StringReader         input; 
+        volatile StringReader input;
 
-        public readonly TcpClient     Socket;
-        public readonly byte[]        Buffer;
+        public readonly TcpClient Socket;
+        public readonly byte[] Buffer;
         public readonly StringBuilder Content;
-        public readonly Logger        Log;
-
+        public readonly Logger Log;
 
         public StateObject(TcpClient cSocket, Logger log)
         {
-            Socket  = cSocket;
-            Log     = log;
-            Buffer  = new byte[BufferSize];
+            Socket = cSocket;
+            Log = log;
+            Buffer = new byte[BufferSize];
             Content = new StringBuilder();
         }
 
@@ -42,7 +41,6 @@ namespace Tracker
         }
     }
 
-
     public sealed class Handler
     {
         #region Message handlers
@@ -52,16 +50,16 @@ namespace Tracker
         static Handler()
         {
             MESSAGE_HANDLERS = new Dictionary<string, Action<StateObject>>();
-            MESSAGE_HANDLERS["REGISTER"]       = ProcessRegisterMessage;
-            MESSAGE_HANDLERS["UNREGISTER"]     = ProcessUnregisterMessage;
-            MESSAGE_HANDLERS["LIST_FILES"]     = ProcessListFilesMessage;
+            MESSAGE_HANDLERS["REGISTER"] = ProcessRegisterMessage;
+            MESSAGE_HANDLERS["UNREGISTER"] = ProcessUnregisterMessage;
+            MESSAGE_HANDLERS["LIST_FILES"] = ProcessListFilesMessage;
             MESSAGE_HANDLERS["LIST_LOCATIONS"] = ProcessListLocationsMessage;
         }
 
         static void ProcessRegisterMessage(StateObject state)
         {
             string line;
-            while (!string.IsNullOrEmpty((line = state.ReadLine()))) //Simplificação
+            if (!string.IsNullOrEmpty((line = state.ReadLine())))
             {
                 string[] triple = line.Split(':');
                 if (triple.Length != 3)
@@ -69,7 +67,12 @@ namespace Tracker
                     state.Log.LogMessage("Handler - Invalid REGISTER message.");
                     return;
                 }
-                IPAddress ipAddress = IPAddress.Parse(triple[1]);
+                IPAddress ipAddress;
+                if (!IPAddress.TryParse(triple[1], out ipAddress))
+                {
+                    state.Log.LogMessage("Handler - Invalid REGISTER message.");
+                    return;
+                }
                 ushort port;
                 if (!ushort.TryParse(triple[2], out port))
                 {
@@ -78,12 +81,14 @@ namespace Tracker
                 }
                 Store.Instance.Register(triple[0], new IPEndPoint(ipAddress, port));
             }
+            else
+            { state.Log.LogMessage("Handler - Invalid REGISTER message."); }
         }
 
         static void ProcessUnregisterMessage(StateObject state)
         {
             string line;
-            while (!string.IsNullOrEmpty((line = state.ReadLine()))) //Simplificação
+            if (!string.IsNullOrEmpty((line = state.ReadLine())))
             {
                 string[] triple = line.Split(':');
                 if (triple.Length != 3)
@@ -91,7 +96,12 @@ namespace Tracker
                     state.Log.LogMessage("Handler - Invalid UNREGISTER message.");
                     return;
                 }
-                IPAddress ipAddress = IPAddress.Parse(triple[1]);
+                IPAddress ipAddress;
+                if (!IPAddress.TryParse(triple[1], out ipAddress))
+                {
+                    state.Log.LogMessage("Handler - Invalid UNREGISTER message.");
+                    return;
+                }
                 ushort port;
                 if (!ushort.TryParse(triple[2], out port))
                 {
@@ -100,6 +110,8 @@ namespace Tracker
                 }
                 Store.Instance.Unregister(triple[0], new IPEndPoint(ipAddress, port));
             }
+            else
+            { state.Log.LogMessage("Handler - Invalid UNREGISTER message."); }
         }
 
         private static void ProcessListFilesMessage(StateObject state)
@@ -107,7 +119,8 @@ namespace Tracker
             string[] trackedFiles = Store.Instance.GetTrackedFiles();
 
             StringBuilder sb = new StringBuilder();
-            foreach (string file in trackedFiles) sb.AppendLine(file);
+            foreach (string file in trackedFiles)
+                sb.AppendLine(file);
 
             byte[] response = Encoding.ASCII.GetBytes(sb.ToString());
             state.Stream.BeginWrite(response, 0, response.Length, null, null);
@@ -115,18 +128,35 @@ namespace Tracker
 
         private static void ProcessListLocationsMessage(StateObject state)
         {
-            IPEndPoint[] fileLocations = Store.Instance.GetFileLocations( state.ReadLine() );
+            string line;
+            if (!string.IsNullOrEmpty((line = state.ReadLine())))
+            {
+                if (Store.Instance.ContainsKey(line))
+                {
+                    IPEndPoint[] fileLocations = Store.Instance.GetFileLocations(line);
 
-            StringBuilder sb = new StringBuilder();
-            foreach (IPEndPoint endpoint in fileLocations) sb.AppendLine(string.Format("{0}:{1}", endpoint.Address, endpoint.Port));
+                    StringBuilder sb = new StringBuilder();
+                    foreach (IPEndPoint endpoint in fileLocations)
+                        sb.AppendLine(string.Format("{0}:{1}", endpoint.Address, endpoint.Port));
 
-            byte[] response = Encoding.ASCII.GetBytes(sb.ToString());
-            state.Stream.BeginWrite(response, 0, response.Length, null, null);
+                    byte[] response = Encoding.ASCII.GetBytes(sb.ToString());
+                    state.Stream.BeginWrite(response, 0, response.Length, null, null);
+                }
+                else
+                { state.Log.LogMessage("Handler - File indicated in LIST_LOCATIONS message not being hosted."); }
+            }
+            else
+            { state.Log.LogMessage("Handler - Invalid LIST_LOCATIONS message."); }
         }
 
         #endregion
 
+        static readonly int TIMEOUT = 5000;
 
+        /// <summary>
+        /// Reads data asynchronously from the StateObject stream
+        /// </summary>
+        /// <param name="ar">IAsyncResult which has the StateObject</param>
         static void ReadDataCallback(IAsyncResult ar)
         {
             StateObject state = (StateObject)ar.AsyncState;
@@ -136,32 +166,58 @@ namespace Tracker
                 if (bytesRead > 0)
                 {
                     state.Content.Append(Encoding.ASCII.GetString(state.Buffer, 0, bytesRead));
-                    
-                    state.Stream.BeginRead(state.Buffer, 0, StateObject.BufferSize,
-                        new AsyncCallback(ReadDataCallback), state);                    
+
+                    // Tests if one blank line was sent meaning client submited request
+                    if (state.Content.ToString().Contains("\r\n\r\n"))
+                    {
+                        string requestType = state.ReadLine();
+                        if (!String.IsNullOrEmpty(requestType))
+                        {
+                            // If client typed 'QUIT' then closes socket
+                            if (requestType == "QUIT")
+                            {
+                                state.Log.LogMessage("Handler - Connection closed by client.");
+                                state.Socket.Close();
+                                return;
+                            }
+
+                            // If client typed a valid command then calls its corresponding handler
+                            if (MESSAGE_HANDLERS.ContainsKey(requestType.ToUpper()))
+                            {
+                                MESSAGE_HANDLERS[requestType](state);
+                                Program.ShowInfo(Store.Instance);
+                            }
+                            // Else command is not recognized
+                            else
+                            {
+                                state.Log.LogMessage("Handler - Unknown message type.");
+                            }
+                        }
+                        else
+                        {
+                            state.Log.LogMessage("Handler - Unknown message type.");
+                        }
+                        // After processing request starts a thread to monitor other incoming request
+                        new Action<TcpClient, Logger>(Handler.StartAcceptTcpClient)
+                            .BeginInvoke(state.Socket, state.Log, null, null);
+                        return;
+                    }
+                    // If no blank line was sent continues to read the stream
+                    else
+                    {
+                        state.Stream.BeginRead(state.Buffer, 0, StateObject.BufferSize,
+                           new AsyncCallback(ReadDataCallback), state);
+                    }
                 }
+                // If no bytes were received the connection was lost
                 else
                 {
-                    state.Log.LogMessage("Handler - Aparently connection was lost!");
-                    if (state.Content.Length > 1)
-                    {
-                        string requestType;
-                        requestType = state.ReadLine();
-                        if (requestType != null && !MESSAGE_HANDLERS.ContainsKey(requestType.ToUpper()))
-                        {
-                            state.Log.LogMessage("Handler - Unknown message type. Servicing ending.");
-                            return;
-                        }
-
-
-                        MESSAGE_HANDLERS[requestType](state);
-                    }
-
-                    Program.ShowInfo(Store.Instance); 
+                    state.Log.LogMessage("Handler - Connection to client was lost.");
                 }
             }
-            catch (IOException)     { state.Log.LogMessage("Handler - Connection closed by client {0}"); }
-            catch (SocketException) { state.Log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
+            catch (IOException) { state.Log.LogMessage("Handler - Connection closed by client."); }
+            catch (ObjectDisposedException) { state.Log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
+            catch (InvalidOperationException) { state.Log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
         }
 
         /// <summary>
@@ -172,13 +228,19 @@ namespace Tracker
             try
             {
                 StateObject state = new StateObject(socket, log);
-                state.Stream.BeginRead(state.Buffer, 0, StateObject.BufferSize, new AsyncCallback(ReadDataCallback), state);
+                IAsyncResult iaR = state.Stream.BeginRead(state.Buffer, 0, StateObject.BufferSize,
+                    new AsyncCallback(ReadDataCallback), state);
+                new Timer(delegate
+                {
+                    if (!iaR.IsCompleted)
+                        ((StateObject)iaR.AsyncState).Socket.Close();
+                }, iaR, Handler.TIMEOUT, Timeout.Infinite);
             }
-            catch (IOException)     { log.LogMessage("Handler - Connection closed by client {0}"); }
-            catch (SocketException) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
+            catch (IOException ioe) { log.LogMessage(String.Format("Handler - Connection closed by client.\n{0}", ioe)); }
+            catch (SocketException se) { log.LogMessage(String.Format("Handler - Client request timed out. Servicing ending.\n{0}", se)); }
         }
     }
-    
+
 
     /// <summary>
     /// This class instances are file tracking servers. They are responsible for accepting 
@@ -210,14 +272,14 @@ namespace Tracker
                 {
                     log.LogMessage("Listener - Waiting for connection requests.");
 
-                    TcpClient socket = srv.AcceptTcpClient(); 
+                    TcpClient socket = srv.AcceptTcpClient();
                     socket.LingerState = new LingerOption(true, 10);
-                    //socket.ReceiveTimeout = 10;
-                    //socket.SendTimeout = 10;
                     log.LogMessage(String.Format("Listener - Connection established with {0}.", socket.Client.RemoteEndPoint));
 
-
-                    Handler.StartAcceptTcpClient(socket, log);
+                    // Starts another thread to handle the new client requests leaving this one
+                    // ready to receive other clients
+                    new Action<TcpClient, Logger>(Handler.StartAcceptTcpClient)
+                        .BeginInvoke(socket, log, null, null);
                 }
             }
             finally
@@ -226,7 +288,6 @@ namespace Tracker
                 srv.Stop();
             }
         }
-
     }
 
     class Program
@@ -280,7 +341,7 @@ namespace Tracker
             // Checking command line arguments
             if (args.Length != 1)
             {
-                Console.WriteLine("Utilização: {0} <numeroPortoTCP>", AppDomain.CurrentDomain.FriendlyName);
+                Console.WriteLine("Usage: {0} <TCPPortNumber>", AppDomain.CurrentDomain.FriendlyName);
                 Environment.Exit(1);
             }
 

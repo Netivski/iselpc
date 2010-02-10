@@ -40,16 +40,20 @@ namespace Tracker
                 string queueEntry = null;
                 lock (messageQueue)
                 {
-                    if (messageQueue.Count == 0)
-                    {                        
-                        Monitor.Wait(messageQueue); // Tem que tratar o Cancelamento
-                    }
-                    else
+                    if (messageQueue.Count > 0)
                     {
                         queueEntry = messageQueue.First.Value;
                         messageQueue.RemoveFirst();
-                        if (messageQueue.Count > 0) Monitor.PulseAll(messageQueue);
-                    }                    
+                    }
+                    else
+                    {
+                        try
+                        {
+                            Monitor.Wait(messageQueue);
+                        }
+                        catch (ThreadInterruptedException) { 
+                        }
+                    }
                 }
 
                 if (queueEntry != null) writer.Write(queueEntry);
