@@ -15,7 +15,7 @@ namespace TestClient
             using(TcpClient client = new TcpClient())
             {
                 client.Connect(IPAddress.Loopback, PORT);
-
+                
                 StreamWriter output = new StreamWriter(client.GetStream());
 
                 // Send request type line
