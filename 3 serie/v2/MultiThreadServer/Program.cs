@@ -213,6 +213,9 @@ namespace Tracker
                 else
                 {
                     state.Log.LogMessage("Handler - Connection to client was lost.");
+                    //state.Stream.BeginRead(state.Buffer, 0, StateObject.BufferSize,
+                    //    new AsyncCallback(ReadDataCallback), state);
+
                 }
             }
             catch (IOException) { state.Log.LogMessage("Handler - Connection closed by client."); }
