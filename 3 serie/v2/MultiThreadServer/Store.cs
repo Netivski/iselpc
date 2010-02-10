@@ -65,6 +65,19 @@ namespace Tracker
         }
 
         /// <summary>
+        /// Gives information about the existence of a file being hosted.
+        /// </summary>
+        /// <param name="key">Name of the file</param>
+        /// <returns>A boolean value indicating if the file is registered.</returns>
+        public bool ContainsKey(string key)
+        {
+            lock (_store)
+            {
+                return _store.ContainsKey(key);
+            }
+        }
+
+        /// <summary>
         /// Registers the given file as being hosted at the given location. 
         /// </summary>
         /// <param name="fileName">The file's name.</param>
