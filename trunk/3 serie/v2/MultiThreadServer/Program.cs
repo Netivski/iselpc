@@ -151,7 +151,7 @@ namespace Tracker
 
         #endregion
 
-        static readonly int TIMEOUT = 5000;
+        static readonly int TIMEOUT = 30000;
 
         /// <summary>
         /// Reads data asynchronously from the StateObject stream
