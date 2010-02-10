@@ -21,7 +21,7 @@ using System.Threading; //
 namespace Tracker
 {
 
-    public sealed class StateObject
+    sealed class StateObject
     {
         // Network Stream.
         public NetworkStream stream = null;
@@ -31,6 +31,8 @@ namespace Tracker
         public byte[] buffer = new byte[BufferSize];
         // Received data string.
         public StringBuilder sb = new StringBuilder();
+        // Timeout flag.
+        public bool timedOut = false;
     }
 
 
@@ -192,7 +194,7 @@ namespace Tracker
         /// The Timout value which Handler waits for a request.
         /// By default is 5s.
         /// </summary>
-        private readonly long timeout = 5000;
+        private readonly long timeout = 10000;
 
         /// <summary>
         /// 
@@ -236,39 +238,42 @@ namespace Tracker
                 if (bytesRead > 0)
                 {
                     _state.sb.Append(Encoding.ASCII.GetString(_state.buffer, 0, bytesRead));
-                    _stream.BeginRead(_state.buffer, 0, StateObject.BufferSize,
-                        new AsyncCallback(ReadDataCallback), _state);
-                    
-                    //Ao ler um line break sinaliza state sabendo que, no StringBuilder de state está o comando
-                    //O problema é quando é lido um bloco da stream (e.g. toda a mensagem)
-                    //Tem que ser feito parse ao stringbuilder de state para obter o comando.
-                    //É state que deve ter métodos GetCommand, GetParams?
-                    //Se sim, então ReadDataCallback só sinaliza state quando encontrar 2 line breaks
-                    //Os handlers de mensagens deixarão de receber um stream de input
-                    //Consequências: trabalho desnecessário quando o utilizador introduz um comando inválido.
+                    if (_state.sb.ToString().Contains("\r\n\r\n"))
+                    {
+                        new Action<StateObject>(ParseInput).BeginInvoke(_state, null, null);
+                        new Action(Run).BeginInvoke(null, null);
+                    }
+                    else
+                    {
+                        _stream.BeginRead(_state.buffer, 0, StateObject.BufferSize,
+                            new AsyncCallback(ReadDataCallback), _state);
+                    }
                 }
                 else
                 {
-                    log.LogMessage("Handler - Aparently connection was lost!");
-                    if (_state.sb.Length > 1)
-                    {
-                        string requestType;
-                        requestType = _state.sb.ToString().ToUpper();
-                        if (!MESSAGE_HANDLERS.ContainsKey(requestType))
-                        {
-                            log.LogMessage("Handler - Unknown message type. Servicing ending.");
-                            return;
-                        }
-                        // Dispatch request processing
-                        MESSAGE_HANDLERS[requestType](input, output, log);
-                    }
-
-                    Program.ShowInfo(Store.Instance); //
+                    log.LogMessage("Handler - Connection to Client was lost.");
                 }
             }
-            catch (Exception e)
+            catch (ObjectDisposedException ode)
             {
+                log.LogMessage(String.Format("Handler - Client request timed out.\n{0}", ode));
             }
+            catch (IOException ioe)
+            {
+                log.LogMessage(String.Format("Handler - Connection was closed.\n{0}", ioe));
+            }
+        }
+
+        private void ParseInput(StateObject _state)
+        {
+            StringReader sr = new StringReader(_state.sb.ToString());
+            Console.WriteLine("In action...");
+            String command = sr.ReadLine();
+            String args = sr.ReadLine();
+
+            Console.WriteLine("Command received: {0}\nParams received: {1}", command, args);
+            if (!MESSAGE_HANDLERS.ContainsKey(command))
+                log.LogMessage("Handler - No such command.");
         }
 
         /// <summary>
@@ -278,22 +283,10 @@ namespace Tracker
         {
             try
             {
-                try
-                {
-                    state = new StateObject();
-                    lock(state)
-                    {
-                        state.stream = connStream;
-                        Stopwatch sw = new Stopwatch();
-                        IAsyncResult getCommand = connStream.BeginRead(state.buffer, 0, StateObject.BufferSize, new AsyncCallback(ReadDataCallback), state);
-                        sw.Start();
-                        Monitor.Wait(state); // RN - Está aqui para bloquear a thread (testes)
-                    }
-
-                }
-
-                catch (IOException) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
-                catch (SocketException) { log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
+                state = new StateObject();
+                state.stream = connStream;
+                connStream.BeginRead(state.buffer, 0, StateObject.BufferSize,
+                    new AsyncCallback(ReadDataCallback), state);
             }
             catch (IOException ioe)
             {
@@ -302,8 +295,8 @@ namespace Tracker
             }
             finally
             {
-                input.Close();
-                output.Close();
+                //input.Close();
+                //output.Close();
             }
         }
     }
@@ -337,26 +330,14 @@ namespace Tracker
                 while (true)
                 {
                     log.LogMessage("Listener - Waiting for connection requests.");
-                    // \/\/\/\/\/\/Não faz sentido correr o cliclo de GC.\/\/\/\/\/\/\ //
-                    ////using (TcpClient socket = srv.AcceptTcpClient()) 
-                    ////{
-
-                    TcpClient socket = srv.AcceptTcpClient(); ////
+                    TcpClient socket = srv.AcceptTcpClient();
                     socket.LingerState = new LingerOption(true, 10);
+                    //socket.ReceiveTimeout = 1000;
+                    //socket.SendTimeout = 1000;
                     log.LogMessage(String.Format("Listener - Connection established with {0}.", socket.Client.RemoteEndPoint));
-                    // Instantiating protocol handler and associate it to the current TCP connection
-                    ////Handler protocolHandler = new Handler(socket.GetStream(), log);
-                    // Synchronously process requests made through de current TCP connection
 
-                    //Register Delegate and Enqueue Slave Method//
-                    new Action(new Handler(socket.GetStream(), log).Run).BeginInvoke(null, null); //                    
+                    new Action<(new Handler(socket.GetStream(), log).Run).BeginInvoke(null, null); //                    
 
-                    ////protocolHandler.Run();
-
-                    ////}
-
-                    // Passa para o método Handler.Run //
-                    ////Program.ShowInfo(Store.Instance);
                 }
             }
             finally
