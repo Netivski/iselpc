@@ -5,36 +5,32 @@ using System.Collections.Generic;
 
 namespace Tracker
 {
-    enum LoggerStatus 
+    enum LoggerStatus { Started, Stoped }
+
+
+    public class Logger
     {
-        Started
-       ,Stoped
-    }
-
-
-	public class Logger
-	{
         const int QUEUE_MAX_SIZE = 2048;
 
-		readonly TextWriter         writer;
-		DateTime                    start;
-        int                         requestCount;
-        volatile LoggerStatus       status;
-        volatile Thread             workerThread;
+        readonly TextWriter writer;
+        DateTime start;
+        int requestCount;
+        volatile LoggerStatus status;
+        volatile Thread workerThread;
         readonly LinkedList<string> messageQueue;
 
-		public Logger() : this(Console.Out) {}
-		public Logger(string logfile) : this(new StreamWriter(new FileStream(logfile, FileMode.Append, FileAccess.Write))) {}
-		public Logger(TextWriter awriter)
-		{
-		    requestCount = 0;
-		    writer       = awriter;
-            status       = LoggerStatus.Stoped;
+        public Logger() : this(Console.Out) { }
+        public Logger(string logfile) : this(new StreamWriter(new FileStream(logfile, FileMode.Append, FileAccess.Write))) { }
+        public Logger(TextWriter awriter)
+        {
+            requestCount = 0;
+            writer = awriter;
+            status = LoggerStatus.Stoped;
             messageQueue = new LinkedList<string>();
-		}
+        }
 
         void WriterWork()
-        {            
+        {
             while (true)
             {
                 string queueEntry = null;
@@ -51,7 +47,8 @@ namespace Tracker
                         {
                             Monitor.Wait(messageQueue);
                         }
-                        catch (ThreadInterruptedException) { 
+                        catch (ThreadInterruptedException)
+                        {
                         }
                     }
                 }
@@ -70,7 +67,7 @@ namespace Tracker
                     Monitor.PulseAll(messageQueue); //Pulse All Threads, podia ser implementado com delegação especifica.
                     return;
                 }
-                
+
                 while (true)
                 {
                     //Implementar o cancelamento e desistência
@@ -102,7 +99,7 @@ namespace Tracker
             {
                 if (status == LoggerStatus.Started) return false;
 
-                start  = DateTime.Now;
+                start = DateTime.Now;
                 status = LoggerStatus.Started;
             }
 
@@ -118,18 +115,18 @@ namespace Tracker
         }
 
 
-		public void LogMessage(string msg)
-		{
+        public void LogMessage(string msg)
+        {
             WriteLine(String.Format("{0}: {1}", DateTime.Now, msg));
-		}
+        }
 
-		public int IncrementRequests()
-		{
+        public int IncrementRequests()
+        {
             return System.Threading.Interlocked.Increment(ref requestCount);
-		}
+        }
 
-		public bool Stop()
-		{
+        public bool Stop()
+        {
             WriteLine();
             LogMessage(String.Format("Running for {0} second(s)", (DateTime.Now.Ticks - start.Ticks) / 10000000L));
             LogMessage(String.Format("Number of request(s): {0}", requestCount));
@@ -141,10 +138,10 @@ namespace Tracker
             {
                 if (status == LoggerStatus.Stoped) return false;
                 workerThread.Interrupt(); //Start Stop 
-                status = LoggerStatus.Stoped;                    
+                status = LoggerStatus.Stoped;
             }
 
-            return true;			
-		}
-	}
+            return true;
+        }
+    }
 }

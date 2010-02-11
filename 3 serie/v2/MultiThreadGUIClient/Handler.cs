@@ -33,7 +33,7 @@ namespace MultiThreadGUIClient
         public static void SendRegister(TcpClient socket, IEnumerable<string> files, string ip, string port)
         {
             string message = "REGISTER\r\n";
-            foreach(string file in files)
+            foreach (string file in files)
                 message += file + ":" + ip + ":" + port + "\r\n";
             message += "\r\n";
             SendMessage(socket, message);
@@ -94,14 +94,15 @@ namespace MultiThreadGUIClient
                 state.Stream.BeginRead(state.Buffer, 0, StateObject<string>.BufferSize,
                             new AsyncCallback(ReadFilesCallback), state);
             }
-            else {
-                state.Callback.BeginInvoke(state.Content.ToString(),null,null);
+            else
+            {
+                state.Callback(state.Content.ToString());
             }
         }
 
         public static void SendListLocs(TcpClient socket, string file, Action<string> callback)
         {
-            string message = String.Format("LIST_LOCATIONS\r\n{0}\r\n\r\n",file);
+            string message = String.Format("LIST_LOCATIONS\r\n{0}\r\n\r\n", file);
             byte[] buffer = Encoding.ASCII.GetBytes(message);
 
             StateObject<string> state = new StateObject<string>(socket, callback);
