@@ -9,6 +9,70 @@ using System.Threading;
 
 namespace Tracker
 {
+    internal sealed class Timeouter
+    {
+        class TimeoutElement
+        {
+            public int _endTime;
+            public IAsyncResult _entry;
+            public TimeoutElement() { _endTime = Environment.TickCount + TIMEOUT; }
+        }
+
+        private LinkedList<TimeoutElement> reqQueue;
+        private const int TIMEOUT = 7000;
+        private System.Timers.Timer worker;
+
+        public static Timeouter Current;
+
+        static Timeouter()
+        {
+            Current = new Timeouter();
+        }
+
+        private Timeouter()
+        {
+            reqQueue = new LinkedList<TimeoutElement>();
+            worker = new System.Timers.Timer(TIMEOUT);
+            worker.Elapsed += DoWork;
+            worker.Enabled = true;
+        }
+
+        private void DoWork(object sender, EventArgs e)
+        {
+            try
+            {
+                worker.Stop();
+                lock (reqQueue)
+                {
+
+                    while (reqQueue.Count > 0)
+                    {
+                        if (reqQueue.First.Value._entry.IsCompleted)
+                        {
+                            reqQueue.RemoveFirst();
+                        }
+                        else if (reqQueue.First.Value._endTime < Environment.TickCount)
+                        {
+                            ((StateObject)reqQueue.First.Value._entry.AsyncState).Socket.Close();
+                            reqQueue.RemoveFirst();
+                        }
+                        else
+                            break;
+                    }
+                }
+            }
+            finally { worker.Start(); }
+        }
+
+        public void AddItem(IAsyncResult entry)
+        {
+            lock (reqQueue)
+            {
+                reqQueue.AddLast(new TimeoutElement { _entry = entry });
+            }
+        }
+    }
+
     internal sealed class StateObject
     {
         public const int BufferSize = 256;
@@ -81,6 +145,7 @@ namespace Tracker
                 }
                 Store.Instance.Register(triple[0], new IPEndPoint(ipAddress, port));
             }
+            Handler.CloseConnection(state);
         }
 
         static void ProcessUnregisterMessage(StateObject state)
@@ -110,6 +175,9 @@ namespace Tracker
             }
             else
             { state.Log.LogMessage("Handler - Invalid UNREGISTER message."); }
+
+
+            Handler.CloseConnection(state);
         }
 
         private static void ProcessListFilesMessage(StateObject state)
@@ -121,7 +189,14 @@ namespace Tracker
                 sb.AppendLine(file);
 
             byte[] response = Encoding.ASCII.GetBytes(sb.ToString());
-            state.Stream.BeginWrite(response, 0, response.Length, null, null);
+            state.Stream.BeginWrite(response, 0, response.Length,
+                ProcessListFilesEnd, state);
+        }
+        private static void ProcessListFilesEnd(IAsyncResult iaR)
+        {
+            StateObject state = (StateObject)iaR.AsyncState;
+            state.Stream.EndWrite(iaR);
+            Handler.CloseConnection(state);
         }
 
         private static void ProcessListLocationsMessage(StateObject state)
@@ -138,18 +213,25 @@ namespace Tracker
                         sb.AppendLine(string.Format("{0}:{1}", endpoint.Address, endpoint.Port));
 
                     byte[] response = Encoding.ASCII.GetBytes(sb.ToString());
-                    state.Stream.BeginWrite(response, 0, response.Length, null, null);
+                    state.Stream.BeginWrite(response, 0, response.Length
+                        , ProcessListLocationsEnd, state);
                 }
                 else
                 { state.Log.LogMessage("Handler - File indicated in LIST_LOCATIONS message not being hosted."); }
             }
             else
             { state.Log.LogMessage("Handler - Invalid LIST_LOCATIONS message."); }
+
+            //Handler.CloseConnection(state);
+        }
+        private static void ProcessListLocationsEnd(IAsyncResult iaR)
+        {
+            StateObject state = (StateObject)iaR.AsyncState;
+            state.Stream.EndWrite(iaR);
+            Handler.CloseConnection(state);
         }
 
         #endregion
-
-        static readonly int TIMEOUT = 30000;
 
         /// <summary>
         /// Reads data asynchronously from the StateObject stream
@@ -170,30 +252,14 @@ namespace Tracker
                     if (state.Content.ToString().Contains("\r\n\r\n"))
                     {
                         string requestType = state.ReadLine();
-                        if (!String.IsNullOrEmpty(requestType))
-                        {
-                            // If client typed a valid command then calls its corresponding handler
-                            if (MESSAGE_HANDLERS.ContainsKey(requestType.ToUpper()))
-                            {
-                                MESSAGE_HANDLERS[requestType](state);
-                                Program.ShowInfo(Store.Instance);
-                            }
-                            // Else command is not recognized
-                            else
-                            {
-                                state.Log.LogMessage("Handler - Unknown message type.");
-                            }
-                        }
+                        // If request is not empty and client typed a valid command
+                        if (!String.IsNullOrEmpty(requestType) && MESSAGE_HANDLERS.ContainsKey(requestType.ToUpper()))
+                            MESSAGE_HANDLERS[requestType](state);
                         else
                         {
                             state.Log.LogMessage("Handler - Unknown message type.");
+                            Handler.CloseConnection(state);
                         }
-                        // After processing request starts a thread to monitor other incoming request
-                        //new Action<TcpClient, Logger>(Handler.StartAcceptTcpClient)
-                        //    .BeginInvoke(state.Socket, state.Log, null, null);
-                        state.Log.LogMessage(string.Format("Handler - Closing connection @ {0}", state.Socket.Client.RemoteEndPoint));
-                        state.Socket.Close();
-                        return;
                     }
                     // If no blank line was sent continues to read the stream
                     else
@@ -207,14 +273,18 @@ namespace Tracker
                 {
                     state.Log.LogMessage("Handler - Connection to client was lost.");
                     state.Socket.Close();
-                    //state.Stream.BeginRead(state.Buffer, 0, StateObject.BufferSize,
-                    //    new AsyncCallback(ReadDataCallback), state);
-
                 }
             }
             catch (IOException) { state.Log.LogMessage("Handler - Connection closed by client.\n"); }
             catch (ObjectDisposedException) { state.Log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending.\n"); }
             catch (InvalidOperationException) { state.Log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending.\n"); }
+        }
+
+        private static void CloseConnection(StateObject state)
+        {
+            state.Log.LogMessage(string.Format("Handler - Closing connection @ {0}", state.Socket.Client.RemoteEndPoint));
+            if (state.Socket.Connected) state.Socket.Close();
+            Program.ShowInfo(Store.Instance);
         }
 
         /// <summary>
@@ -227,11 +297,7 @@ namespace Tracker
                 StateObject state = new StateObject(socket, log);
                 IAsyncResult iaR = state.Stream.BeginRead(state.Buffer, 0, StateObject.BufferSize,
                     new AsyncCallback(ReadDataCallback), state);
-                new Timer(delegate
-                {
-                    if (!iaR.IsCompleted)
-                        ((StateObject)iaR.AsyncState).Socket.Close();
-                }, iaR, Handler.TIMEOUT, Timeout.Infinite);
+                Timeouter.Current.AddItem(iaR);
             }
             catch (IOException ioe) { log.LogMessage(String.Format("Handler - Connection closed by client.\n{0}", ioe)); }
             catch (SocketException se) { log.LogMessage(String.Format("Handler - Client request timed out. Servicing ending.\n{0}", se)); }
@@ -250,18 +316,11 @@ namespace Tracker
         /// </summary>
         private readonly int portNumber;
 
-        /// <summary>
-        /// Receive timeout for each Client connection.
-        /// </summary>
-        private readonly int timeOut;
-
         /// <summary> Initiates a tracking server instance.</summary>
         /// <param name="_portNumber"> The TCP port number to be used.</param>
-        /// <param name="_timeOut"> The timeout value for data receiving.</param>
-        public Listener(int _portNumber, int _timeOut)
+        public Listener(int _portNumber)
         {
             portNumber = _portNumber;
-            timeOut = _timeOut;
         }
 
         /// <summary>
@@ -280,7 +339,6 @@ namespace Tracker
                     log.LogMessage("Listener - Waiting for connection requests.");
 
                     TcpClient socket = srv.AcceptTcpClient();
-                    socket.ReceiveTimeout = timeOut;
                     socket.LingerState = new LingerOption(true, 10);
                     log.LogMessage(String.Format("Listener - Connection established with {0}.", socket.Client.RemoteEndPoint));
 
@@ -362,7 +420,7 @@ namespace Tracker
             log.Start();
             try
             {
-                new Listener(port,10).Run(log);
+                new Listener(port).Run(log);
             }
             finally
             {
