@@ -59,7 +59,7 @@ namespace Tracker
         static void ProcessRegisterMessage(StateObject state)
         {
             string line;
-            if (!string.IsNullOrEmpty((line = state.ReadLine())))
+            while (!string.IsNullOrEmpty((line = state.ReadLine())))
             {
                 string[] triple = line.Split(':');
                 if (triple.Length != 3)
@@ -81,8 +81,6 @@ namespace Tracker
                 }
                 Store.Instance.Register(triple[0], new IPEndPoint(ipAddress, port));
             }
-            else
-            { state.Log.LogMessage("Handler - Invalid REGISTER message."); }
         }
 
         static void ProcessUnregisterMessage(StateObject state)
@@ -163,6 +161,7 @@ namespace Tracker
             try
             {
                 int bytesRead = state.Stream.EndRead(ar);
+                state.Log.LogMessage("Waiting.....");
                 if (bytesRead > 0)
                 {
                     state.Content.Append(Encoding.ASCII.GetString(state.Buffer, 0, bytesRead));
@@ -173,14 +172,6 @@ namespace Tracker
                         string requestType = state.ReadLine();
                         if (!String.IsNullOrEmpty(requestType))
                         {
-                            // If client typed 'QUIT' then closes socket
-                            if (requestType == "QUIT")
-                            {
-                                state.Log.LogMessage("Handler - Connection closed by client.");
-                                state.Socket.Close();
-                                return;
-                            }
-
                             // If client typed a valid command then calls its corresponding handler
                             if (MESSAGE_HANDLERS.ContainsKey(requestType.ToUpper()))
                             {
@@ -198,8 +189,10 @@ namespace Tracker
                             state.Log.LogMessage("Handler - Unknown message type.");
                         }
                         // After processing request starts a thread to monitor other incoming request
-                        new Action<TcpClient, Logger>(Handler.StartAcceptTcpClient)
-                            .BeginInvoke(state.Socket, state.Log, null, null);
+                        //new Action<TcpClient, Logger>(Handler.StartAcceptTcpClient)
+                        //    .BeginInvoke(state.Socket, state.Log, null, null);
+                        state.Log.LogMessage(string.Format("Handler - Closing connection @ {0}", state.Socket.Client.RemoteEndPoint));
+                        state.Socket.Close();
                         return;
                     }
                     // If no blank line was sent continues to read the stream
@@ -213,14 +206,15 @@ namespace Tracker
                 else
                 {
                     state.Log.LogMessage("Handler - Connection to client was lost.");
+                    state.Socket.Close();
                     //state.Stream.BeginRead(state.Buffer, 0, StateObject.BufferSize,
                     //    new AsyncCallback(ReadDataCallback), state);
 
                 }
             }
-            catch (IOException) { state.Log.LogMessage("Handler - Connection closed by client."); }
-            catch (ObjectDisposedException) { state.Log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
-            catch (InvalidOperationException) { state.Log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending."); }
+            catch (IOException) { state.Log.LogMessage("Handler - Connection closed by client.\n"); }
+            catch (ObjectDisposedException) { state.Log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending.\n"); }
+            catch (InvalidOperationException) { state.Log.LogMessage("Handler - Timeout expired while receivig request. Servicing ending.\n"); }
         }
 
         /// <summary>
@@ -256,9 +250,19 @@ namespace Tracker
         /// </summary>
         private readonly int portNumber;
 
+        /// <summary>
+        /// Receive timeout for each Client connection.
+        /// </summary>
+        private readonly int timeOut;
+
         /// <summary> Initiates a tracking server instance.</summary>
         /// <param name="_portNumber"> The TCP port number to be used.</param>
-        public Listener(int _portNumber) { portNumber = _portNumber; }
+        /// <param name="_timeOut"> The timeout value for data receiving.</param>
+        public Listener(int _portNumber, int _timeOut)
+        {
+            portNumber = _portNumber;
+            timeOut = _timeOut;
+        }
 
         /// <summary>
         ///	Server's main loop implementation.
@@ -276,13 +280,11 @@ namespace Tracker
                     log.LogMessage("Listener - Waiting for connection requests.");
 
                     TcpClient socket = srv.AcceptTcpClient();
+                    socket.ReceiveTimeout = timeOut;
                     socket.LingerState = new LingerOption(true, 10);
                     log.LogMessage(String.Format("Listener - Connection established with {0}.", socket.Client.RemoteEndPoint));
 
-                    // Starts another thread to handle the new client requests leaving this one
-                    // ready to receive other clients
-                    new Action<TcpClient, Logger>(Handler.StartAcceptTcpClient)
-                        .BeginInvoke(socket, log, null, null);
+                    Handler.StartAcceptTcpClient(socket, log);
                 }
             }
             finally
@@ -360,7 +362,7 @@ namespace Tracker
             log.Start();
             try
             {
-                new Listener(port).Run(log);
+                new Listener(port,10).Run(log);
             }
             finally
             {
